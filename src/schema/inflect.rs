@@ -18,11 +18,16 @@ pub(crate) fn to_plural(s: &str) -> String {
 }
 
 pub(crate) fn to_pascal_singular(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
-    }
+    s.split('_')
+        .filter(|seg| !seg.is_empty())
+        .map(|seg| {
+            let mut chars = seg.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -55,6 +60,7 @@ mod tests {
     fn test_pascal_singular() {
         assert_eq!(to_pascal_singular("hero"), "Hero");
         assert_eq!(to_pascal_singular("team"), "Team");
+        assert_eq!(to_pascal_singular("secret_lair"), "SecretLair");
         assert_eq!(to_pascal_singular(""), "");
     }
 }
