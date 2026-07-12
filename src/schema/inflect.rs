@@ -3,11 +3,13 @@ pub(crate) fn to_plural(s: &str) -> String {
         || s.ends_with("ch") || s.ends_with("sh")
     {
         format!("{}es", s)
+    } else if s.ends_with('o')
+        && !s.ends_with("eo") && !s.ends_with("io") && !s.ends_with("oo") && !s.ends_with("uo")
+    {
+        // consonant + o → oes (hero → heroes)
+        format!("{}es", s)
     } else if s.ends_with('y')
-        && !s.ends_with("ay")
-        && !s.ends_with("ey")
-        && !s.ends_with("oy")
-        && !s.ends_with("uy")
+        && !s.ends_with("ay") && !s.ends_with("ey") && !s.ends_with("oy") && !s.ends_with("uy")
     {
         format!("{}ies", &s[..s.len() - 1])
     } else {

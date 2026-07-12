@@ -6,13 +6,21 @@ rust-version = "1.97"
 description = "Dynamic GraphQL schema generation from MongoDB collections, optimized for AWS Lambda"
 license = "MIT"
 
+[features]
+integration = []
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-bson = { version = "3.1", features = ["chrono-0_4"] }
 thiserror = "2.0"
 tokio = { version = "1.52", features = ["rt", "macros"] }
 tracing = "0.1"
+async-graphql = { version = "7.2", features = ["dynamic-schema"] }
+mongodb = "3.8"
+chrono = "0.4"
+base64 = "0.22"
+arc-swap = "1.7"
+futures = "0.3"
 
 [dev-dependencies]
 temp-env = "0.3"

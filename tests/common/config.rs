@@ -2,6 +2,7 @@ use graphql_mongodb_lib::error::GraphQLError;
 
 /// Dev/test configuration. Not part of the core library API.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Config {
     pub inflect_names: bool,
     pub introspection: bool,

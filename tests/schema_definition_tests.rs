@@ -1,17 +1,15 @@
 use graphql_mongodb_lib::schema::definition::{FieldType, RelationKind, SchemaDefinition};
 use graphql_mongodb_lib::schema::parser::SchemaParser;
-use serde_json::json;
 
-/// Carga el schema de prueba real desde el archivo.
 fn load_test_schema() -> SchemaDefinition {
-    let json = include_str!("../../schema-definition.json");
+    let json = include_str!("../schema-definition.json");
     SchemaParser::from_str(json).expect("schema-definition.json must be valid")
 }
 
 #[test]
 fn test_parse_real_schema_six_collections() {
     let schema = load_test_schema();
-    assert_eq!(schema.collections.len(), 6, "6 collections expected");
+    assert_eq!(schema.collections.len(), 6);
 
     let names: Vec<&str> = schema
         .collections
@@ -46,18 +44,14 @@ fn test_hero_has_all_field_types() {
         })
         .collect();
 
-    assert!(field_types.contains(&"ID"), "should have ID field");
-    assert!(field_types.contains(&"String"), "should have String field");
-    assert!(field_types.contains(&"Int"), "should have Int field");
-    assert!(field_types.contains(&"Float"), "should have Float field");
-    assert!(field_types.contains(&"Boolean"), "should have Boolean field");
-    assert!(field_types.contains(&"DateTime"), "should have DateTime field");
-    assert!(field_types.contains(&"Json"), "should have Json field");
-    assert!(field_types.contains(&"List"), "should have List field");
-    assert!(
-        field_types.contains(&"Relation"),
-        "should have Relation fields"
-    );
+    assert!(field_types.contains(&"String"));
+    assert!(field_types.contains(&"Int"));
+    assert!(field_types.contains(&"Float"));
+    assert!(field_types.contains(&"Boolean"));
+    assert!(field_types.contains(&"DateTime"));
+    assert!(field_types.contains(&"Json"));
+    assert!(field_types.contains(&"List"));
+    assert!(field_types.contains(&"Relation"));
 }
 
 #[test]
@@ -81,12 +75,7 @@ fn test_enum_deduplication_same_name() {
 fn test_one_to_many_relations_have_reverse_name() {
     let schema = load_test_schema();
     let hero = schema.collection_by_name("hero").unwrap();
-
-    let team_field = hero
-        .fields
-        .iter()
-        .find(|f| f.name == "team_id")
-        .unwrap();
+    let team_field = hero.fields.iter().find(|f| f.name == "team_id").unwrap();
 
     if let FieldType::Relation(rel) = &team_field.field_type {
         assert!(matches!(rel.kind, RelationKind::OneToMany));
@@ -124,7 +113,6 @@ fn test_many_to_many_both_sides_declared() {
 fn test_list_field_deserialization() {
     let schema = load_test_schema();
     let hero = schema.collection_by_name("hero").unwrap();
-
     let aliases = hero
         .fields
         .iter()
@@ -144,19 +132,15 @@ fn test_unique_and_required_fields() {
     let schema = load_test_schema();
     let mission = schema.collection_by_name("mission").unwrap();
 
-    let code_field = mission
-        .fields
-        .iter()
-        .find(|f| f.name == "code")
-        .unwrap();
-    assert!(code_field.required, "code should be required");
-    assert!(code_field.unique, "code should be unique");
+    let code_field = mission.fields.iter().find(|f| f.name == "code").unwrap();
+    assert!(code_field.required);
+    assert!(code_field.unique);
 
     let location_field = mission
         .fields
         .iter()
         .find(|f| f.name == "location")
         .unwrap();
-    assert!(!location_field.required, "location should be optional");
-    assert!(!location_field.unique, "location should not be unique");
+    assert!(!location_field.required);
+    assert!(!location_field.unique);
 }

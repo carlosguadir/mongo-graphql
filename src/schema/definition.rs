@@ -114,9 +114,14 @@ impl<'de> Deserialize<'de> for FieldType {
                     .map_err(de::Error::custom)?;
                 Ok(FieldType::List(Box::new(inner)))
             }
-            Value::Object(_) => {
+            Value::Object(ref obj) => {
+                let rel_value = if let Some(inner) = obj.get("relation") {
+                    inner.clone()
+                } else {
+                    value
+                };
                 let rel: RelationFieldDef =
-                    serde_json::from_value(value).map_err(de::Error::custom)?;
+                    serde_json::from_value(rel_value).map_err(de::Error::custom)?;
                 Ok(FieldType::Relation(rel))
             }
             _ => Err(de::Error::custom("expected string, [type], or relation object")),

@@ -1,4 +1,3 @@
-use graphql_mongodb_lib::error::GraphQLError;
 use graphql_mongodb_lib::schema::parser::SchemaParser;
 
 #[test]

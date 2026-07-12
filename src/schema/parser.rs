@@ -39,20 +39,6 @@ impl SchemaParser {
                         });
                     }
 
-                    if let Some(junction) = &rel.junction {
-                        if !names.contains(junction.collection.as_str()) {
-                            return Err(GraphQLError::SchemaParse {
-                                message: format!(
-                                    "Junction collection '{}' not found (referenced by {}.{})",
-                                    junction.collection, coll.collection, field.name
-                                ),
-                                location: format!(
-                                    "$.collections.{}.fields.{}.junction.collection",
-                                    coll.collection, field.name
-                                ),
-                            });
-                        }
-                    }
                 }
             }
         }

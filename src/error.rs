@@ -18,3 +18,9 @@ pub enum GraphQLError {
     #[error("Internal error: {0}")]
     Internal(String),
 }
+
+impl From<async_graphql::Error> for GraphQLError {
+    fn from(e: async_graphql::Error) -> Self {
+        GraphQLError::Internal(e.message)
+    }
+}
