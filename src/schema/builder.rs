@@ -226,10 +226,7 @@ impl<'a> SchemaBuilder<'a> {
             .argument(InputValue::new("first", TypeRef::named("Int")))
             .argument(InputValue::new("after", TypeRef::named("String")))
             .argument(InputValue::new("where", where_type))
-            .argument(InputValue::new(
-                "sort",
-                TypeRef::named_nn_list(sort_type.type_name()),
-            )),
+            .argument(InputValue::new("sort", sort_type)),
         );
 
         // ---- Mutation: create ----
@@ -337,7 +334,7 @@ impl<'a> SchemaBuilder<'a> {
         builder
     }
 
-    fn register_page_info(&mut self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
+    fn register_page_info(&self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
         let page_info = Object::new("PageInfo")
             .field(Field::new(
                 "hasNextPage",
@@ -362,7 +359,7 @@ impl<'a> SchemaBuilder<'a> {
         builder.register(page_info)
     }
 
-    fn register_delete_result(&mut self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
+    fn register_delete_result(&self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
         let delete_result = Object::new("DeleteResult")
             .field(Field::new(
                 "success",
@@ -377,7 +374,7 @@ impl<'a> SchemaBuilder<'a> {
         builder.register(delete_result)
     }
 
-    fn register_filter_types(&mut self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
+    fn register_filter_types(&self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
         builder
             .register(
                 async_graphql::dynamic::Enum::new("SortDirection")
@@ -394,7 +391,8 @@ impl<'a> SchemaBuilder<'a> {
 
 /// Extract a nested field value from a `ConstValue::Object` by name.
 fn extract_nested(parent: &async_graphql::Value, field_name: &str) -> Option<async_graphql::Value> {
-    let json: serde_json::Value = parent.clone().try_into().ok()?;
-    let field_json = json.get(field_name)?;
-    field_json.clone().try_into().ok()
+    match parent {
+        async_graphql::Value::Object(map) => map.get(field_name).cloned(),
+        _ => None,
+    }
 }
