@@ -41,7 +41,9 @@ pub fn bson_to_json(bson: &Bson) -> serde_json::Value {
         Bson::Int64(i) => serde_json::Value::Number((*i).into()),
         Bson::Double(f) => serde_json::Number::from_f64(*f)
             .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
+            .unwrap_or_else(|| {
+                serde_json::Value::String(f.to_string())
+            }),
         Bson::Boolean(b) => serde_json::Value::Bool(*b),
         Bson::DateTime(dt) => {
             let millis = dt.timestamp_millis();
@@ -63,6 +65,22 @@ pub fn bson_to_json(bson: &Bson) -> serde_json::Value {
         Bson::Null | Bson::Undefined => serde_json::Value::Null,
         _ => serde_json::Value::Null,
     }
+}
+
+/// Map GraphQL input field names back to MongoDB field names.
+/// Fields without an explicit `graphql_name` are returned unchanged.
+pub fn input_doc_to_mongo(doc: mongodb::bson::Document, coll_def: &CollectionDef) -> mongodb::bson::Document {
+    let mut mapped = mongodb::bson::Document::new();
+    for (key, value) in doc {
+        let mongo_name = coll_def
+            .fields
+            .iter()
+            .find(|f| f.graphql_name() == key)
+            .map(|f| f.name.clone())
+            .unwrap_or(key);
+        mapped.insert(mongo_name, value);
+    }
+    mapped
 }
 
 /// Convert a `serde_json::Value` into a dynamic `FieldValue` for resolver responses.
