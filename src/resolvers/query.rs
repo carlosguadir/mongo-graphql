@@ -10,9 +10,9 @@ use crate::schema::definition::CollectionDef;
 
 pub async fn resolve_get(
     ctx: ResolverContext<'_>,
+    coll_def: &CollectionDef,
+    db: &Database,
 ) -> Result<Option<serde_json::Value>, GraphQLError> {
-    let coll_def = ctx.data::<CollectionDef>()?;
-    let db = ctx.data::<Database>()?;
     let coll = db.collection::<mongodb::bson::Document>(&coll_def.collection);
 
     let where_input: mongodb::bson::Document = ctx
@@ -21,12 +21,14 @@ pub async fn resolve_get(
         .deserialize()
         .map_err(|e| GraphQLError::Internal(e.message))?;
 
-    let doc = coll
-        .find_one(where_input)
-        .await
-        .map_err(|e| GraphQLError::Internal(format!("MongoDB error: {}", e)))?;
+    let filter = transform_id_filter(where_input);
 
-    match doc {
+    let document = coll
+        .find_one(filter)
+        .await
+        ?;
+
+    match document {
         Some(d) => Ok(Some(document_to_graphql_value(&d, coll_def))),
         None => Ok(None),
     }
@@ -34,61 +36,40 @@ pub async fn resolve_get(
 
 pub async fn resolve_list(
     ctx: ResolverContext<'_>,
+    coll_def: &CollectionDef,
+    db: &Database,
+    max_page_size: usize,
 ) -> Result<Option<serde_json::Value>, GraphQLError> {
-    let coll_def = ctx.data::<CollectionDef>()?;
-    let db = ctx.data::<Database>()?;
-    let max_page_size: usize = ctx
-        .data::<crate::schema::builder::RuntimeConfig>()
-        .map(|c| c.max_page_size)
-        .unwrap_or(100);
     let coll = db.collection::<mongodb::bson::Document>(&coll_def.collection);
 
-    let first: Option<i64> = ctx
-        .args
-        .get("first")
-        .and_then(|v| v.deserialize().ok());
-    let after: Option<String> = ctx
-        .args
-        .get("after")
-        .and_then(|v| v.deserialize().ok());
+    let first: Option<i64> = try_deserialize_optional(&ctx.args, "first")?;
+    let after: Option<String> = try_deserialize_optional(&ctx.args, "after")?;
 
     let pagination = PaginationArgs { first, after };
     let limit = pagination.effective_limit(max_page_size);
 
-    let mut filter = ctx
-        .args
-        .get("where")
-        .and_then(|v| v.deserialize::<mongodb::bson::Document>().ok())
-        .unwrap_or_default();
+    let mut filter: mongodb::bson::Document =
+        try_deserialize_optional(&ctx.args, "where")?.unwrap_or_default();
 
     if let Some(after) = &pagination.after {
         let cursor_id = decode_cursor(after)?;
         filter = doc! { "$and": [filter, doc! { "_id": { "$gt": cursor_id } }] };
     }
 
-    if let Ok(row_filter) = ctx.data::<mongodb::bson::Document>() {
-        if !row_filter.is_empty() {
-            filter = doc! { "$and": [filter, row_filter] };
-        }
-    }
-
-    let sort: mongodb::bson::Document = ctx
-        .args
-        .get("sort")
-        .and_then(|v| v.deserialize().ok())
-        .unwrap_or_else(|| doc! { "_id": 1 });
+    let sort: mongodb::bson::Document =
+        try_deserialize_optional(&ctx.args, "sort")?.unwrap_or_else(|| doc! { "_id": 1 });
 
     let mut cursor = coll
         .find(filter)
         .sort(sort)
         .limit(limit + 1)
         .await
-        .map_err(|e| GraphQLError::Internal(format!("MongoDB error: {}", e)))?;
+        ?;
 
     let mut docs: Vec<mongodb::bson::Document> = Vec::new();
     while let Some(result) = cursor.next().await {
-        let doc = result.map_err(|e| GraphQLError::Internal(format!("MongoDB error: {}", e)))?;
-        docs.push(doc);
+        let document = result?;
+        docs.push(document);
     }
 
     let has_next = docs.len() > limit as usize;
@@ -103,12 +84,12 @@ pub async fn resolve_list(
 
     let start_cursor = docs
         .first()
-        .and_then(|d| d.get_object_id("_id").ok())
+        .and_then(|document| document.get_object_id("_id").ok())
         .map(|id| encode_cursor(&id));
 
     let end_cursor = docs
         .last()
-        .and_then(|d| d.get_object_id("_id").ok())
+        .and_then(|document| document.get_object_id("_id").ok())
         .map(|id| encode_cursor(&id));
 
     Ok(Some(serde_json::json!({
@@ -121,4 +102,30 @@ pub async fn resolve_list(
         },
         "totalCount": serde_json::Value::Null
     })))
+}
+
+/// Deserialize an optional argument, returning `None` if absent and
+/// an error if present but malformed.
+fn try_deserialize_optional<T: serde::de::DeserializeOwned>(
+    args: &async_graphql::dynamic::ObjectAccessor<'_>,
+    name: &str,
+) -> Result<Option<T>, GraphQLError> {
+    match args.get(name) {
+        Some(value) => value
+            .deserialize()
+            .map(Some)
+            .map_err(|e| GraphQLError::Internal(e.message)),
+        None => Ok(None),
+    }
+}
+
+/// Transform a where input that may use `id` (hex string) to `_id` (ObjectId).
+/// MongoDB stores the primary key as `_id`, but GraphQL exposes it as `id`.
+fn transform_id_filter(mut filter: mongodb::bson::Document) -> mongodb::bson::Document {
+    if let Some(mongodb::bson::Bson::String(hex)) = filter.remove("id") {
+        if let Ok(oid) = mongodb::bson::oid::ObjectId::parse_str(&hex) {
+            filter.insert("_id", oid);
+        }
+    }
+    filter
 }

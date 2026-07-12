@@ -110,8 +110,11 @@ impl<'de> Deserialize<'de> for FieldType {
                 _ => Err(de::Error::custom(format!("unknown type: {}", s))),
             },
             Value::Array(arr) if arr.len() == 1 => {
-                let inner: FieldType = serde_json::from_value(arr.into_iter().next().unwrap())
-                    .map_err(de::Error::custom)?;
+                let first = arr.into_iter().next().ok_or_else(|| {
+                    de::Error::custom("expected exactly one list element")
+                })?;
+                let inner: FieldType =
+                    serde_json::from_value(first).map_err(de::Error::custom)?;
                 Ok(FieldType::List(Box::new(inner)))
             }
             Value::Object(ref obj) => {

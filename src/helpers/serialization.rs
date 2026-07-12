@@ -1,4 +1,6 @@
+use crate::error::GraphQLError;
 use crate::schema::definition::{CollectionDef, FieldType};
+use async_graphql::dynamic::FieldValue;
 use mongodb::bson::Bson;
 
 /// Convert a MongoDB document to a GraphQL-compatible JSON value.
@@ -61,4 +63,11 @@ pub fn bson_to_json(bson: &Bson) -> serde_json::Value {
         Bson::Null | Bson::Undefined => serde_json::Value::Null,
         _ => serde_json::Value::Null,
     }
+}
+
+/// Convert a `serde_json::Value` into a dynamic `FieldValue` for resolver responses.
+pub fn json_to_field_value(json: serde_json::Value) -> Result<FieldValue<'static>, GraphQLError> {
+    async_graphql::Value::try_from(json)
+        .map(FieldValue::value)
+        .map_err(|e| GraphQLError::Internal(format!("Value conversion: {}", e)))
 }

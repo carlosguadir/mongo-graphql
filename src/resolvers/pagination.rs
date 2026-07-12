@@ -26,15 +26,20 @@ pub fn decode_cursor(cursor: &str) -> Result<ObjectId, crate::error::GraphQLErro
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(cursor)
-        .map_err(|e| crate::error::GraphQLError::Internal(format!("Invalid cursor: {}", e)))?;
+        .map_err(|e| {
+            crate::error::GraphQLError::Pagination(format!("Invalid cursor: {}", e))
+        })?;
 
     let payload: serde_json::Value = serde_json::from_slice(&bytes)
-        .map_err(|e| crate::error::GraphQLError::Internal(format!("Invalid cursor: {}", e)))?;
+        .map_err(|e| {
+            crate::error::GraphQLError::Pagination(format!("Invalid cursor payload: {}", e))
+        })?;
 
-    let id_str = payload["id"]
-        .as_str()
-        .ok_or_else(|| crate::error::GraphQLError::Internal("Invalid cursor format".into()))?;
+    let id_str = payload["id"].as_str().ok_or_else(|| {
+        crate::error::GraphQLError::Pagination("Invalid cursor format: missing id".into())
+    })?;
 
-    ObjectId::parse_str(id_str)
-        .map_err(|e| crate::error::GraphQLError::Internal(format!("Invalid cursor id: {}", e)))
+    ObjectId::parse_str(id_str).map_err(|e| {
+        crate::error::GraphQLError::Pagination(format!("Invalid cursor id: {}", e))
+    })
 }

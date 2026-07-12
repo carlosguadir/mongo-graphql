@@ -1,12 +1,14 @@
 use std::collections::HashSet;
 
 use async_graphql::dynamic::{
-    FieldFuture, FieldValue, InputObject, Object, Schema,
+    Field, FieldFuture, FieldValue, InputObject, InputValue, Object, Schema,
     SchemaBuilder as AgSchemaBuilder, TypeRef,
 };
 use mongodb::Database;
 
 use crate::error::GraphQLError;
+use crate::helpers::serialization::json_to_field_value;
+use crate::resolvers::{mutation, query};
 use crate::schema::definition::{CollectionDef, EnumDef, FieldType, SchemaDefinition};
 use crate::types::scalars;
 
@@ -35,6 +37,7 @@ impl<'a> SchemaBuilder<'a> {
         builder = scalars::register_all(builder);
         builder = self.register_page_info(builder);
         builder = self.register_delete_result(builder);
+        builder = self.register_filter_types(builder);
 
         let mut query_root = Object::new("Query");
         let mut mutation_root = Object::new("Mutation");
@@ -66,7 +69,6 @@ impl<'a> SchemaBuilder<'a> {
         db: &Database,
     ) -> Result<(AgSchemaBuilder, Object, Object), GraphQLError> {
         let type_name = collection.type_name();
-        let object_type = TypeRef::named(type_name.clone());
 
         for field in &collection.fields {
             if let Some(enum_def) = &field.r#enum {
@@ -80,19 +82,29 @@ impl<'a> SchemaBuilder<'a> {
                 continue;
             }
             let field_type = scalars::type_ref(&field.field_type);
-            obj = obj.field(async_graphql::dynamic::Field::new(
-                field.graphql_name(),
+            let field_name = field.graphql_name();
+            obj = obj.field(Field::new(
+                field_name.clone(),
                 field_type,
-                |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
+                move |ctx| {
+                    let name = field_name.clone();
+                    FieldFuture::new(async move {
+                        let value = ctx
+                            .parent_value
+                            .as_value()
+                            .and_then(|parent| extract_nested(parent, &name));
+                        match value {
+                            Some(val) => Ok(Some(FieldValue::value(val))),
+                            None => Ok(None),
+                        }
+                    })
+                },
             ));
         }
         builder = builder.register(obj);
 
         let where_unique = InputObject::new(format!("{}WhereUniqueInput", type_name))
-            .field(async_graphql::dynamic::InputValue::new(
-                "id",
-                TypeRef::named_nn("ID"),
-            ));
+            .field(InputValue::new("id", TypeRef::named_nn("ID")));
         builder = builder.register(where_unique);
 
         let mut create_input = InputObject::new(format!("{}CreateInput", type_name));
@@ -104,13 +116,13 @@ impl<'a> SchemaBuilder<'a> {
                 continue;
             }
             let field_type = scalars::type_ref(&field.field_type);
-            let nn = if field.required {
+            let input_type = if field.required {
                 TypeRef::named_nn(field_type.type_name())
             } else {
                 field_type
             };
-            create_input = create_input
-                .field(async_graphql::dynamic::InputValue::new(field.graphql_name(), nn));
+            create_input =
+                create_input.field(InputValue::new(field.graphql_name(), input_type));
         }
         builder = builder.register(create_input);
 
@@ -123,97 +135,183 @@ impl<'a> SchemaBuilder<'a> {
                 continue;
             }
             let field_type = scalars::type_ref(&field.field_type);
-            update_input = update_input
-                .field(async_graphql::dynamic::InputValue::new(field.graphql_name(), field_type));
+            update_input =
+                update_input.field(InputValue::new(field.graphql_name(), field_type));
         }
         builder = builder.register(update_input);
 
-        let where_input = InputObject::new(format!("{}WhereInput", type_name)).field(
-            async_graphql::dynamic::InputValue::new("id", TypeRef::named("IdFilter")),
-        );
+        let where_input =
+            InputObject::new(format!("{}WhereInput", type_name))
+                .field(InputValue::new("id", TypeRef::named("IdFilter")));
         builder = builder.register(where_input);
 
-        let sort_input = InputObject::new(format!("{}SortInput", type_name)).field(
-            async_graphql::dynamic::InputValue::new("id", TypeRef::named("SortDirection")),
-        );
+        let sort_input =
+            InputObject::new(format!("{}SortInput", type_name))
+                .field(InputValue::new("id", TypeRef::named("SortDirection")));
         builder = builder.register(sort_input);
 
+        let object_ref = TypeRef::named(type_name.clone());
         let conn_name = format!("{}Connection", type_name);
         let conn_obj = Object::new(conn_name.clone())
-            .field(async_graphql::dynamic::Field::new(
+            .field(Field::new(
                 "edges",
                 TypeRef::named_nn_list(type_name.clone()),
                 |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
             ))
-            .field(async_graphql::dynamic::Field::new(
+            .field(Field::new(
                 "pageInfo",
                 TypeRef::named_nn("PageInfo"),
                 |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
             ))
-            .field(async_graphql::dynamic::Field::new(
+            .field(Field::new(
                 "totalCount",
                 TypeRef::named("Int"),
                 |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
             ));
         builder = builder.register(conn_obj);
 
-        let where_unique_type = TypeRef::named_nn(format!("{}WhereUniqueInput", type_name));
+        // ---- Query: singular ----
         let coll_for_get = collection.clone();
         let db_for_get = db.clone();
+        let where_unique_type = TypeRef::named_nn(format!("{}WhereUniqueInput", type_name));
 
         query_root = query_root.field(
-            async_graphql::dynamic::Field::new(
+            Field::new(
                 collection.singular_name(),
-                object_type.clone(),
-                move |_| {
-                    let _def = coll_for_get.clone();
-                    let _db = db_for_get.clone();
-                    FieldFuture::new(async { Ok(Some(FieldValue::NULL)) })
+                object_ref.clone(),
+                move |ctx| {
+                    let coll_def = coll_for_get.clone();
+                    let db = db_for_get.clone();
+                    FieldFuture::new(async move {
+                        let result = query::resolve_get(ctx, &coll_def, &db).await;
+                        (match result {
+                            Ok(Some(value)) => json_to_field_value(value).map(Some),
+                            Ok(None) => Ok(None),
+                            Err(e) => Err(e),
+                        })
+                        .map_err(|e| e.into_graphql_error())
+                    })
                 },
             )
-            .argument(async_graphql::dynamic::InputValue::new("where", where_unique_type)),
+            .argument(InputValue::new("where", where_unique_type)),
         );
 
+        // ---- Query: plural ----
         let coll_for_list = collection.clone();
         let db_for_list = db.clone();
-        let conn_type = TypeRef::named_nn(conn_name);
+        let conn_type = TypeRef::named_nn(conn_name.clone());
         let where_type = TypeRef::named(format!("{}WhereInput", type_name));
         let sort_type = TypeRef::named(format!("{}SortInput", type_name));
+        let page_size = self.config.max_page_size;
 
         query_root = query_root.field(
-            async_graphql::dynamic::Field::new(
+            Field::new(
                 collection.plural_name(),
                 conn_type,
-                move |_| {
-                    let _def = coll_for_list.clone();
-                    let _db = db_for_list.clone();
-                    FieldFuture::new(async { Ok(Some(FieldValue::NULL)) })
+                move |ctx| {
+                    let coll_def = coll_for_list.clone();
+                    let db = db_for_list.clone();
+                    FieldFuture::new(async move {
+                        let result =
+                            query::resolve_list(ctx, &coll_def, &db, page_size).await;
+                        (match result {
+                            Ok(Some(value)) => json_to_field_value(value).map(Some),
+                            Ok(None) => Ok(None),
+                            Err(e) => Err(e),
+                        })
+                        .map_err(|e| e.into_graphql_error())
+                    })
                 },
             )
-            .argument(async_graphql::dynamic::InputValue::new("first", TypeRef::named("Int")))
-            .argument(async_graphql::dynamic::InputValue::new("after", TypeRef::named("String")))
-            .argument(async_graphql::dynamic::InputValue::new("where", where_type))
-            .argument(async_graphql::dynamic::InputValue::new(
+            .argument(InputValue::new("first", TypeRef::named("Int")))
+            .argument(InputValue::new("after", TypeRef::named("String")))
+            .argument(InputValue::new("where", where_type))
+            .argument(InputValue::new(
                 "sort",
                 TypeRef::named_nn_list(sort_type.type_name()),
             )),
         );
 
+        // ---- Mutation: create ----
         let coll_for_create = collection.clone();
         let db_for_create = db.clone();
         let create_type = TypeRef::named_nn(format!("{}CreateInput", type_name));
 
         mutation_root = mutation_root.field(
-            async_graphql::dynamic::Field::new(
+            Field::new(
                 format!("create{}", type_name),
-                object_type.clone(),
-                move |_| {
-                    let _def = coll_for_create.clone();
-                    let _db = db_for_create.clone();
-                    FieldFuture::new(async { Ok(Some(FieldValue::NULL)) })
+                object_ref.clone(),
+                move |ctx| {
+                    let coll_def = coll_for_create.clone();
+                    let db = db_for_create.clone();
+                    FieldFuture::new(async move {
+                        let result = mutation::resolve_create(ctx, &coll_def, &db).await;
+                        (match result {
+                            Ok(Some(value)) => json_to_field_value(value).map(Some),
+                            Ok(None) => Ok(None),
+                            Err(e) => Err(e),
+                        })
+                        .map_err(|e| e.into_graphql_error())
+                    })
                 },
             )
-            .argument(async_graphql::dynamic::InputValue::new("input", create_type)),
+            .argument(InputValue::new("input", create_type)),
+        );
+
+        // ---- Mutation: update ----
+        let coll_for_update = collection.clone();
+        let db_for_update = db.clone();
+        let update_type = TypeRef::named_nn(format!("{}UpdateInput", type_name));
+        let where_unique_type_update =
+            TypeRef::named_nn(format!("{}WhereUniqueInput", type_name));
+
+        mutation_root = mutation_root.field(
+            Field::new(
+                format!("update{}", type_name),
+                object_ref.clone(),
+                move |ctx| {
+                    let coll_def = coll_for_update.clone();
+                    let db = db_for_update.clone();
+                    FieldFuture::new(async move {
+                        let result = mutation::resolve_update(ctx, &coll_def, &db).await;
+                        (match result {
+                            Ok(Some(value)) => json_to_field_value(value).map(Some),
+                            Ok(None) => Ok(None),
+                            Err(e) => Err(e),
+                        })
+                        .map_err(|e| e.into_graphql_error())
+                    })
+                },
+            )
+            .argument(InputValue::new("where", where_unique_type_update))
+            .argument(InputValue::new("input", update_type)),
+        );
+
+        // ---- Mutation: delete ----
+        let coll_for_delete = collection.clone();
+        let db_for_delete = db.clone();
+        let where_unique_type_delete =
+            TypeRef::named_nn(format!("{}WhereUniqueInput", type_name));
+
+        mutation_root = mutation_root.field(
+            Field::new(
+                format!("delete{}", type_name),
+                TypeRef::named_nn("DeleteResult"),
+                move |ctx| {
+                    let coll_def = coll_for_delete.clone();
+                    let db = db_for_delete.clone();
+                    FieldFuture::new(async move {
+                        let result = mutation::resolve_delete(ctx, &coll_def, &db).await;
+                        (match result {
+                            Ok(Some(value)) => json_to_field_value(value).map(Some),
+                            Ok(None) => Ok(None),
+                            Err(e) => Err(e),
+                        })
+                        .map_err(|e| e.into_graphql_error())
+                    })
+                },
+            )
+            .argument(InputValue::new("where", where_unique_type_delete)),
         );
 
         Ok((builder, query_root, mutation_root))
@@ -230,36 +328,33 @@ impl<'a> SchemaBuilder<'a> {
         let items: Vec<async_graphql::dynamic::EnumItem> = enum_def
             .values
             .iter()
-            .map(|v| async_graphql::dynamic::EnumItem::new(v.clone()))
+            .map(|value| async_graphql::dynamic::EnumItem::new(value.clone()))
             .collect();
-        builder = builder.register(
-            async_graphql::dynamic::Enum::new(enum_def.name.clone()).items(items),
-        );
+        builder = builder.register(async_graphql::dynamic::Enum::new(
+            enum_def.name.clone(),
+        ).items(items));
         self.registered_enums.insert(enum_def.name.clone());
         builder
     }
 
-    fn register_page_info(
-        &mut self,
-        builder: AgSchemaBuilder,
-    ) -> AgSchemaBuilder {
+    fn register_page_info(&mut self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
         let page_info = Object::new("PageInfo")
-            .field(async_graphql::dynamic::Field::new(
+            .field(Field::new(
                 "hasNextPage",
                 TypeRef::named_nn("Boolean"),
                 |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
             ))
-            .field(async_graphql::dynamic::Field::new(
+            .field(Field::new(
                 "hasPreviousPage",
                 TypeRef::named_nn("Boolean"),
                 |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
             ))
-            .field(async_graphql::dynamic::Field::new(
+            .field(Field::new(
                 "startCursor",
                 TypeRef::named("String"),
                 |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
             ))
-            .field(async_graphql::dynamic::Field::new(
+            .field(Field::new(
                 "endCursor",
                 TypeRef::named("String"),
                 |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
@@ -267,21 +362,39 @@ impl<'a> SchemaBuilder<'a> {
         builder.register(page_info)
     }
 
-    fn register_delete_result(
-        &mut self,
-        builder: AgSchemaBuilder,
-    ) -> AgSchemaBuilder {
+    fn register_delete_result(&mut self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
         let delete_result = Object::new("DeleteResult")
-            .field(async_graphql::dynamic::Field::new(
+            .field(Field::new(
                 "success",
                 TypeRef::named_nn("Boolean"),
                 |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
             ))
-            .field(async_graphql::dynamic::Field::new(
+            .field(Field::new(
                 "deletedId",
                 TypeRef::named_nn("ID"),
                 |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
             ));
         builder.register(delete_result)
     }
+
+    fn register_filter_types(&mut self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
+        builder
+            .register(
+                async_graphql::dynamic::Enum::new("SortDirection")
+                    .item(async_graphql::dynamic::EnumItem::new("ASC"))
+                    .item(async_graphql::dynamic::EnumItem::new("DESC")),
+            )
+            .register(
+                InputObject::new("IdFilter")
+                    .field(InputValue::new("eq", TypeRef::named("ID")))
+                    .field(InputValue::new("ne", TypeRef::named("ID"))),
+            )
+    }
+}
+
+/// Extract a nested field value from a `ConstValue::Object` by name.
+fn extract_nested(parent: &async_graphql::Value, field_name: &str) -> Option<async_graphql::Value> {
+    let json: serde_json::Value = parent.clone().try_into().ok()?;
+    let field_json = json.get(field_name)?;
+    field_json.clone().try_into().ok()
 }
