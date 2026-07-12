@@ -1,0 +1,237 @@
+{
+  "collections": [
+    {
+      "collection": "hero",
+      "graphql_name": "Hero",
+      "description": "Superheroes registered in the league",
+      "fields": [
+        { "name": "id", "type": "ID", "required": true },
+        { "name": "alias", "type": "String", "required": true, "unique": true },
+        { "name": "secret_identity", "type": "String", "required": true },
+        { "name": "power_level", "type": "Int", "required": true },
+        { "name": "height", "type": "Float" },
+        { "name": "known_aliases", "type": ["String"] },
+        { "name": "power_history", "type": ["Int"] },
+        { "name": "protected_city", "type": "String" },
+        { "name": "active", "type": "Boolean", "required": true },
+        { "name": "rank", "type": "String", "enum": { "name": "Rank", "values": ["OMEGA", "ALPHA", "BETA", "GAMMA", "DELTA"] } },
+        { "name": "joined_at", "type": "DateTime", "required": true },
+        { "name": "bio", "type": "String" },
+        { "name": "custom_fields", "type": "Json" },
+        {
+          "name": "team_id",
+          "graphql_name": "team",
+          "type": { "relation": { "kind": "one_to_many", "collection": "team", "reference_field": "id", "reverse_name": "members" } }
+        },
+        {
+          "name": "archenemy_id",
+          "graphql_name": "archenemy",
+          "type": { "relation": { "kind": "one_to_one", "collection": "villain", "reference_field": "id", "reverse_name": "archenemy_of" } }
+        },
+        {
+          "name": "secret_lair_id",
+          "graphql_name": "secret_lair",
+          "type": { "relation": { "kind": "one_to_one", "collection": "secret_lair", "reference_field": "id", "reverse_name": "hero" } }
+        },
+        {
+          "name": "missions",
+          "type": {
+            "relation": {
+              "kind": "many_to_many",
+              "collection": "mission",
+              "reference_field": "id",
+              "junction": {
+                "collection": "hero_mission",
+                "local_field": "hero_id",
+                "foreign_field": "mission_id",
+                "foreign_reference": "id",
+                "metadata_fields": ["role", "outcome", "damage_taken", "ended_at"]
+              }
+            }
+          }
+        },
+        {
+          "name": "powers",
+          "type": {
+            "relation": {
+              "kind": "many_to_many",
+              "collection": "power",
+              "reference_field": "id",
+              "junction": {
+                "collection": "hero_power",
+                "local_field": "hero_id",
+                "foreign_field": "power_id",
+                "foreign_reference": "id",
+                "metadata_fields": ["mastery_level", "discovered_at"]
+              }
+            }
+          }
+        },
+        { "name": "created_at", "type": "DateTime", "required": true },
+        { "name": "updated_at", "type": "DateTime" }
+      ]
+    },
+    {
+      "collection": "secret_lair",
+      "graphql_name": "SecretLair",
+      "description": "Secret hideouts and bases",
+      "fields": [
+        { "name": "id", "type": "ID", "required": true },
+        { "name": "name", "type": "String", "required": true, "unique": true },
+        { "name": "location", "type": "String", "required": true },
+        { "name": "coordinates", "type": ["Float"] },
+        { "name": "is_underground", "type": "Boolean", "required": true },
+        { "name": "security_level", "type": "Int" },
+        { "name": "facilities", "type": ["String"] },
+        { "name": "specs", "type": "Json" },
+        { "name": "created_at", "type": "DateTime", "required": true }
+      ]
+    },
+    {
+      "collection": "villain",
+      "graphql_name": "Villain",
+      "description": "Archenemies and supervillains",
+      "fields": [
+        { "name": "id", "type": "ID", "required": true },
+        { "name": "alias", "type": "String", "required": true, "unique": true },
+        { "name": "secret_identity", "type": "String", "required": true },
+        { "name": "threat_level", "type": "Int", "required": true },
+        { "name": "bounty", "type": "Float" },
+        { "name": "objective", "type": "String" },
+        { "name": "superpowers", "type": "String" },
+        { "name": "organization", "type": "String" },
+        { "name": "hideouts", "type": ["String"] },
+        { "name": "active", "type": "Boolean", "required": true },
+        { "name": "rank", "type": "String", "enum": { "name": "Rank", "values": ["OMEGA", "ALPHA", "BETA", "GAMMA", "DELTA"] } },
+        { "name": "threat_category", "type": "String", "enum": { "name": "ThreatCategory", "values": ["GLOBAL", "CONTINENTAL", "CITY", "STREET"] } },
+        {
+          "name": "missions",
+          "type": {
+            "relation": {
+              "kind": "many_to_many",
+              "collection": "mission",
+              "reference_field": "id",
+              "junction": {
+                "collection": "villain_mission",
+                "local_field": "villain_id",
+                "foreign_field": "mission_id",
+                "foreign_reference": "id",
+                "metadata_fields": ["evil_plan", "was_captured"]
+              }
+            }
+          }
+        },
+        { "name": "created_at", "type": "DateTime", "required": true }
+      ]
+    },
+    {
+      "collection": "team",
+      "graphql_name": "Team",
+      "description": "Teams and factions of superheroes",
+      "fields": [
+        { "name": "id", "type": "ID", "required": true },
+        { "name": "name", "type": "String", "required": true, "unique": true },
+        { "name": "secret_base", "type": "String" },
+        { "name": "founded_at", "type": "DateTime", "required": true },
+        { "name": "budget", "type": "Float" },
+        { "name": "is_official", "type": "Boolean", "required": true },
+        { "name": "motto", "type": "String" },
+        { "name": "member_count_history", "type": ["Int"] },
+        { "name": "metadata", "type": "Json" },
+        { "name": "created_at", "type": "DateTime", "required": true }
+      ]
+    },
+    {
+      "collection": "mission",
+      "graphql_name": "Mission",
+      "description": "Missions and special operations",
+      "fields": [
+        { "name": "id", "type": "ID", "required": true },
+        { "name": "code", "type": "String", "required": true, "unique": true },
+        { "name": "description", "type": "String", "required": true },
+        { "name": "date", "type": "DateTime", "required": true },
+        { "name": "status", "type": "String", "required": true },
+        { "name": "danger_level", "type": "Int", "required": true },
+        { "name": "reward", "type": "Int" },
+        { "name": "danger_scores", "type": ["Float"] },
+        { "name": "location", "type": "String" },
+        { "name": "tags", "type": ["String"] },
+        { "name": "intel_data", "type": "Json" },
+        {
+          "name": "assigned_team_id",
+          "graphql_name": "assigned_team",
+          "type": { "relation": { "kind": "one_to_many", "collection": "team", "reference_field": "id" } }
+        },
+        {
+          "name": "heroes",
+          "type": {
+            "relation": {
+              "kind": "many_to_many",
+              "collection": "hero",
+              "reference_field": "id",
+              "junction": {
+                "collection": "hero_mission",
+                "local_field": "mission_id",
+                "foreign_field": "hero_id",
+                "foreign_reference": "id",
+                "metadata_fields": ["role", "outcome", "damage_taken", "ended_at"]
+              }
+            }
+          }
+        },
+        {
+          "name": "villains",
+          "type": {
+            "relation": {
+              "kind": "many_to_many",
+              "collection": "villain",
+              "reference_field": "id",
+              "junction": {
+                "collection": "villain_mission",
+                "local_field": "mission_id",
+                "foreign_field": "villain_id",
+                "foreign_reference": "id",
+                "metadata_fields": ["evil_plan", "was_captured"]
+              }
+            }
+          }
+        },
+        { "name": "created_at", "type": "DateTime", "required": true }
+      ]
+    },
+    {
+      "collection": "power",
+      "graphql_name": "Power",
+      "description": "Powers and special abilities",
+      "fields": [
+        { "name": "id", "type": "ID", "required": true },
+        { "name": "name", "type": "String", "required": true, "unique": true },
+        { "name": "type", "type": "String", "required": true },
+        { "name": "level", "type": "Int", "required": true },
+        { "name": "description", "type": "String" },
+        { "name": "cooldown_seconds", "type": "Float" },
+        { "name": "element", "type": "String" },
+        { "name": "compatible_elements", "type": ["String"] },
+        { "name": "effects", "type": "Json" },
+        {
+          "name": "heroes",
+          "type": {
+            "relation": {
+              "kind": "many_to_many",
+              "collection": "hero",
+              "reference_field": "id",
+              "junction": {
+                "collection": "hero_power",
+                "local_field": "power_id",
+                "foreign_field": "hero_id",
+                "foreign_reference": "id",
+                "metadata_fields": ["mastery_level", "discovered_at"]
+              }
+            }
+          }
+        },
+        { "name": "created_at", "type": "DateTime", "required": true }
+      ]
+    }
+  ]
+}
