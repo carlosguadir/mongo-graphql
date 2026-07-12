@@ -106,7 +106,7 @@ pub async fn resolve_list(
 
 /// Deserialize an optional argument, returning `None` if absent and
 /// an error if present but malformed.
-fn try_deserialize_optional<T: serde::de::DeserializeOwned>(
+pub(crate) fn try_deserialize_optional<T: serde::de::DeserializeOwned>(
     args: &async_graphql::dynamic::ObjectAccessor<'_>,
     name: &str,
 ) -> Result<Option<T>, GraphQLError> {
@@ -121,11 +121,60 @@ fn try_deserialize_optional<T: serde::de::DeserializeOwned>(
 
 /// Transform a where input that may use `id` (hex string) to `_id` (ObjectId).
 /// MongoDB stores the primary key as `_id`, but GraphQL exposes it as `id`.
-fn transform_id_filter(mut filter: mongodb::bson::Document) -> mongodb::bson::Document {
+pub(crate) fn transform_id_filter(mut filter: mongodb::bson::Document) -> mongodb::bson::Document {
     if let Some(mongodb::bson::Bson::String(hex)) = filter.remove("id") {
         if let Ok(oid) = mongodb::bson::oid::ObjectId::parse_str(&hex) {
             filter.insert("_id", oid);
         }
     }
     filter
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mongodb::bson::{doc, oid::ObjectId, Bson};
+
+    #[test]
+    fn test_transform_id_filter_converts_hex_to_object_id() {
+        let oid = ObjectId::new();
+        let filter = doc! { "id": oid.to_hex() };
+        let result = transform_id_filter(filter);
+        assert_eq!(result.get("_id"), Some(&Bson::ObjectId(oid)));
+        assert!(!result.contains_key("id"));
+    }
+
+    #[test]
+    fn test_transform_id_filter_preserves_other_fields() {
+        let oid = ObjectId::new();
+        let filter = doc! { "id": oid.to_hex(), "alias": "TestHero" };
+        let result = transform_id_filter(filter);
+        assert_eq!(result.get("_id"), Some(&Bson::ObjectId(oid)));
+        assert_eq!(
+            result.get("alias"),
+            Some(&Bson::String("TestHero".into()))
+        );
+    }
+
+    #[test]
+    fn test_transform_id_filter_invalid_hex_ignored() {
+        let filter = doc! { "id": "not-a-valid-hex" };
+        let result = transform_id_filter(filter);
+        assert!(!result.contains_key("_id"));
+        assert!(!result.contains_key("id"));
+    }
+
+    #[test]
+    fn test_transform_id_filter_no_id_field_unchanged() {
+        let filter = doc! { "alias": "TestHero", "active": true };
+        let result = transform_id_filter(filter.clone());
+        assert_eq!(result, filter);
+    }
+
+    #[test]
+    fn test_transform_id_filter_empty_document() {
+        let filter = doc! {};
+        let result = transform_id_filter(filter.clone());
+        assert_eq!(result, filter);
+    }
 }
