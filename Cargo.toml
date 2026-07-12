@@ -1,0 +1,18 @@
+[package]
+name = "graphql-mongodb-lib"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+description = "Dynamic GraphQL schema generation from MongoDB collections, optimized for AWS Lambda"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bson = { version = "3.1", features = ["chrono-0_4"] }
+thiserror = "2.0"
+tokio = { version = "1.52", features = ["rt", "macros"] }
+tracing = "0.1"
+
+[dev-dependencies]
+temp-env = "0.3"
