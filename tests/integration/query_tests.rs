@@ -76,4 +76,46 @@ mod tests {
         let query_name = &result["data"]["__schema"]["queryType"]["name"];
         assert_eq!(query_name.as_str().unwrap(), "Query");
     }
+
+    #[tokio::test]
+    async fn test_list_heroes_pagination() {
+        let (db, schema) = setup().await;
+
+        // Insert a few heroes to paginate through
+        let hero = db.collection::<mongodb::bson::Document>("hero");
+        for i in 0..5 {
+            let oid = ObjectId::new();
+            hero.insert_one(doc! {
+                "_id": oid,
+                "id": oid,
+                "alias": format!("PaginatedHero{}", i),
+                "secret_identity": format!("Secret{}", i),
+                "power_level": 1000 + i * 100,
+                "active": true,
+                "joined_at": mongodb::bson::DateTime::now(),
+                "created_at": mongodb::bson::DateTime::now(),
+            })
+            .await
+            .unwrap();
+        }
+
+        let result = GraphQLExecutor::execute(
+            &schema,
+            r#"query { heroes(first: 3) { edges { alias powerLevel } pageInfo { hasNextPage endCursor } totalCount } }"#,
+            async_graphql::Variables::default(),
+        )
+        .await
+        .unwrap();
+
+        // Should not have errors
+        if let Some(errors) = result.get("errors") {
+            panic!("GraphQL errors: {:?}", errors);
+        }
+
+        let connection = &result["data"]["heroes"];
+        let edges = connection["edges"].as_array().unwrap();
+        assert_eq!(edges.len(), 3);
+        assert_eq!(connection["pageInfo"]["hasNextPage"].as_bool().unwrap(), true);
+        assert!(connection["pageInfo"]["endCursor"].as_str().is_some());
+    }
 }
