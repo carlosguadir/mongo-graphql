@@ -38,18 +38,8 @@ pub async fn resolve_create(
         }
     })?;
 
-    let created = coll
-        .find_one(doc! { "_id": oid })
-        .await
-        ?
-        .ok_or_else(|| GraphQLError::NotFound {
-            message: format!(
-                "Document not found in '{}' after insert",
-                coll_def.collection
-            ),
-        })?;
-
-    Ok(Some(document_to_graphql_value(&created, coll_def)))
+    // Serialize directly from the input document — avoids a redundant round-trip.
+    Ok(Some(document_to_graphql_value(&doc, coll_def)))
 }
 
 pub async fn resolve_update(
@@ -70,9 +60,12 @@ pub async fn resolve_update(
         .deserialize()
         .map_err(|e| GraphQLError::Internal(e.message))?;
 
-    let mut update_input = input_doc_to_mongo(update_input, coll_def);
-    update_input.remove("_id");
-    update_input.remove("id");
+    let update_input = input_doc_to_mongo(update_input, coll_def);
+    if update_input.contains_key("_id") || update_input.contains_key("id") {
+        return Err(GraphQLError::Internal(
+            "Updating the id field is not allowed".into(),
+        ));
+    }
 
     let filter = transform_id_filter(where_input)?;
 
@@ -129,8 +122,17 @@ pub async fn resolve_delete(
     let filter = transform_id_filter(where_input)?;
     let result = coll.delete_one(filter).await?;
 
+    if result.deleted_count == 0 {
+        return Err(GraphQLError::NotFound {
+            message: format!(
+                "Document not found in '{}' for delete",
+                coll_def.collection
+            ),
+        });
+    }
+
     Ok(Some(serde_json::json!({
-        "success": result.deleted_count > 0,
+        "success": true,
         "deletedId": id,
     })))
 }
@@ -146,6 +148,9 @@ fn is_duplicate_key_error(error: &mongodb::error::Error) -> bool {
             }
             _ => false,
         },
+        mongodb::error::ErrorKind::BulkWrite(bulk_failure) => {
+            bulk_failure.write_errors.iter().any(|(_, write_error)| write_error.code == 11000 || write_error.code == 11001)
+        }
         _ => false,
     }
 }

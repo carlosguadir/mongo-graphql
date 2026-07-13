@@ -23,7 +23,7 @@ pub fn type_ref(ft: &crate::schema::definition::FieldType) -> TypeRef {
         FieldType::Boolean => TypeRef::named("Boolean"),
         FieldType::DateTime => TypeRef::named("DateTime"),
         FieldType::Json => TypeRef::named("Json"),
-        FieldType::List(inner) => TypeRef::named_list(type_ref(inner).type_name()),
+        FieldType::List(inner) => TypeRef::named_nn_list(type_ref(inner).type_name()),
         FieldType::Relation(_) => TypeRef::named("ID"),
     }
 }

@@ -14,6 +14,7 @@ impl SchemaParser {
 
         Self::validate_referenced_collections(&schema)?;
         Self::validate_fields(&schema)?;
+        Self::validate_enum_names(&schema)?;
         Self::validate_many_to_many(&schema)?;
 
         Ok(schema)
@@ -80,6 +81,22 @@ impl SchemaParser {
             }
 
             for field in &coll.fields {
+                // V1: only a single level of nesting is supported for lists.
+                if let FieldType::List(inner) = &field.field_type {
+                    if matches!(**inner, FieldType::List(_)) {
+                        return Err(GraphQLError::SchemaParse {
+                            message: format!(
+                                "Nested lists are not supported in {}.{}",
+                                coll.collection, field.name
+                            ),
+                            location: format!(
+                                "$.collections.{}.fields.{}.type",
+                                coll.collection, field.name
+                            ),
+                        });
+                    }
+                }
+
                 if let Some(enum_def) = &field.r#enum {
                     if enum_def.values.is_empty() {
                         return Err(GraphQLError::SchemaParse {
@@ -120,6 +137,35 @@ impl SchemaParser {
                                 ),
                             });
                         }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_enum_names(schema: &SchemaDefinition) -> Result<(), GraphQLError> {
+        let type_names: std::collections::HashSet<String> = schema
+            .collections
+            .iter()
+            .map(|coll| coll.type_name())
+            .collect();
+
+        for coll_def in &schema.collections {
+            for field_def in &coll_def.fields {
+                if let Some(enum_def) = &field_def.r#enum {
+                    if type_names.contains(&enum_def.name) {
+                        return Err(GraphQLError::SchemaParse {
+                            message: format!(
+                                "Enum '{}' in {}.{} clashes with an auto-generated type name",
+                                enum_def.name, coll_def.collection, field_def.name
+                            ),
+                            location: format!(
+                                "$.collections.{}.fields.{}.enum.name",
+                                coll_def.collection, field_def.name
+                            ),
+                        });
                     }
                 }
             }

@@ -25,6 +25,8 @@ fn test_pagination_clamped_to_max() {
     let args = PaginationArgs {
         first: Some(500),
         after: None,
+        last: None,
+        before: None,
     };
     assert_eq!(args.effective_limit(100).unwrap(), 100);
 }
@@ -34,6 +36,8 @@ fn test_pagination_explicit_first() {
     let args = PaginationArgs {
         first: Some(5),
         after: None,
+        last: None,
+        before: None,
     };
     assert_eq!(args.effective_limit(100).unwrap(), 5);
 }
@@ -43,6 +47,8 @@ fn test_pagination_negative_first_rejected() {
     let args = PaginationArgs {
         first: Some(-5),
         after: None,
+        last: None,
+        before: None,
     };
     assert!(args.effective_limit(100).is_err());
 }
@@ -52,6 +58,30 @@ fn test_pagination_zero_first_rejected() {
     let args = PaginationArgs {
         first: Some(0),
         after: None,
+        last: None,
+        before: None,
+    };
+    assert!(args.effective_limit(100).is_err());
+}
+
+#[test]
+fn test_pagination_last_backward() {
+    let args = PaginationArgs {
+        first: None,
+        after: None,
+        last: Some(10),
+        before: None,
+    };
+    assert_eq!(args.effective_limit(100).unwrap(), 10);
+}
+
+#[test]
+fn test_pagination_both_first_and_last_rejected() {
+    let args = PaginationArgs {
+        first: Some(10),
+        after: None,
+        last: Some(10),
+        before: None,
     };
     assert!(args.effective_limit(100).is_err());
 }

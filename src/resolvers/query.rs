@@ -39,28 +39,51 @@ pub async fn resolve_list(
     coll_def: &CollectionDef,
     db: &Database,
     max_page_size: usize,
-) -> Result<Option<serde_json::Value>, GraphQLError> {
+) -> Result<serde_json::Value, GraphQLError> {
     let coll = db.collection::<mongodb::bson::Document>(&coll_def.collection);
 
     let first: Option<i64> = try_deserialize_optional(&ctx.args, "first")?;
     let after: Option<String> = try_deserialize_optional(&ctx.args, "after")?;
+    let last: Option<i64> = try_deserialize_optional(&ctx.args, "last")?;
+    let before: Option<String> = try_deserialize_optional(&ctx.args, "before")?;
 
-    let pagination = PaginationArgs { first, after };
+    let pagination = PaginationArgs { first, after, last, before };
     let limit = pagination.effective_limit(max_page_size)?;
+    let is_backward = last.is_some();
 
     let raw_filter: mongodb::bson::Document =
         try_deserialize_optional(&ctx.args, "where")?.unwrap_or_default();
-    let base_filter = transform_where_filter(raw_filter)?;
+    let base_filter = transform_where_filter(raw_filter, coll_def)?;
 
-    let filter = if let Some(after) = &pagination.after {
-        let cursor_id = decode_cursor(after)?;
-        doc! { "$and": [base_filter.clone(), doc! { "_id": { "$gt": cursor_id } }] }
+    let filter = if is_backward {
+        if let Some(before) = &pagination.before {
+            let cursor_id = decode_cursor(before)?;
+            doc! { "$and": [base_filter.clone(), doc! { "_id": { "$lt": cursor_id } }] }
+        } else {
+            base_filter.clone()
+        }
     } else {
-        base_filter.clone()
+        if let Some(after) = &pagination.after {
+            let cursor_id = decode_cursor(after)?;
+            doc! { "$and": [base_filter.clone(), doc! { "_id": { "$gt": cursor_id } }] }
+        } else {
+            base_filter.clone()
+        }
     };
 
-    let sort: mongodb::bson::Document =
-        try_deserialize_optional(&ctx.args, "sort")?.unwrap_or_else(|| doc! { "_id": 1 });
+    // Build sort from SortInput: map GraphQL field names to MongoDB names.
+    let sort_raw: mongodb::bson::Document =
+        try_deserialize_optional(&ctx.args, "sort")?.unwrap_or_else(|| doc! { "_id": if is_backward { -1 } else { 1 } });
+    let mut sort = mongodb::bson::Document::new();
+    for (gql_field, direction) in &sort_raw {
+        let mongo_name = graphql_to_mongo_field(gql_field, coll_def);
+        let dir = direction.as_i32().unwrap_or(1);
+        sort.insert(mongo_name, dir);
+    }
+
+    // Cursor direction flips for backward pagination.
+    let sort_direction: i32 = if is_backward { -1 } else { 1 };
+    sort.insert("_id", sort_direction);
 
     let mut cursor = coll
         .find(filter)
@@ -75,14 +98,30 @@ pub async fn resolve_list(
         docs.push(document);
     }
 
-    let has_next = docs.len() > limit as usize;
-    if has_next {
-        docs.pop();
+    // For backward pagination, reverse the results so edges appear in forward order.
+    if is_backward {
+        docs.reverse();
+    }
+
+    let has_more = docs.len() > limit as usize;
+    if has_more {
+        if is_backward {
+            docs.remove(0);
+        } else {
+            docs.pop();
+        }
     }
 
     let edges: Vec<serde_json::Value> = docs
         .iter()
-        .map(|doc| document_to_graphql_value(doc, coll_def))
+        .map(|document| {
+            let node = document_to_graphql_value(document, coll_def);
+            let cursor = document
+                .get_object_id("_id")
+                .map(|id| encode_cursor(&id))
+                .unwrap_or_default();
+            serde_json::json!({ "node": node, "cursor": cursor })
+        })
         .collect();
 
     let start_cursor = docs
@@ -95,21 +134,21 @@ pub async fn resolve_list(
         .and_then(|document| document.get_object_id("_id").ok())
         .map(|id| encode_cursor(&id));
 
-    let has_previous = if let Some(first_doc) = docs.first() {
-        if let Ok(first_oid) = first_doc.get_object_id("_id") {
-            let prev_filter =
-                doc! { "$and": [base_filter.clone(), doc! { "_id": { "$lt": first_oid } }] };
-            coll.find_one(prev_filter).await?.is_some()
-        } else {
-            false
-        }
+    let has_next = if is_backward {
+        pagination.before.is_some()
     } else {
-        false
+        has_more
+    };
+
+    let has_previous = if is_backward {
+        has_more
+    } else {
+        pagination.after.is_some()
     };
 
     let total_count = coll.count_documents(base_filter).await?;
 
-    Ok(Some(serde_json::json!({
+    Ok(serde_json::json!({
         "edges": edges,
         "pageInfo": {
             "hasNextPage": has_next,
@@ -118,7 +157,7 @@ pub async fn resolve_list(
             "endCursor": end_cursor,
         },
         "totalCount": total_count as i64
-    })))
+    }))
 }
 
 /// Deserialize an optional argument, returning `None` if absent and
@@ -157,59 +196,88 @@ pub(crate) fn transform_id_filter(
 /// and `{"id": {"ne": "hex"}}` → `{"_id": {"$ne": ObjectId("hex")}}`.
 fn transform_where_filter(
     filter: mongodb::bson::Document,
+    coll_def: &CollectionDef,
 ) -> Result<mongodb::bson::Document, GraphQLError> {
     let mut result = mongodb::bson::Document::new();
     for (key, value) in filter {
-        if key == "id" {
-            match value {
-                mongodb::bson::Bson::Document(id_filter) => {
-                    for (op, val) in id_filter {
+        let mongo_key = graphql_to_mongo_field(&key, coll_def);
+        let is_id_field = mongo_key == "_id";
+
+        match value {
+            mongodb::bson::Bson::Document(filter_doc) => {
+                for (op, val) in filter_doc {
+                    // Id field → convert hex string to ObjectId.
+                    if is_id_field {
+                        let hex = val.as_str().ok_or_else(|| {
+                            GraphQLError::Internal(format!(
+                                "Id filter value must be a string for operator '{}'",
+                                op
+                            ))
+                        })?;
+                        let oid = mongodb::bson::oid::ObjectId::parse_str(hex)
+                            .map_err(|_| {
+                                GraphQLError::Internal(format!(
+                                    "Invalid ObjectId in where filter: {}",
+                                    hex
+                                ))
+                            })?;
                         match op.as_str() {
-                            "eq" => {
-                                let hex = val.as_str().ok_or_else(|| {
-                                    GraphQLError::Internal(
-                                        "IdFilter.eq must be a string".into(),
-                                    )
-                                })?;
-                                let oid =
-                                    mongodb::bson::oid::ObjectId::parse_str(hex)
-                                        .map_err(|_| {
-                                            GraphQLError::Internal(format!(
-                                                "Invalid ObjectId in where filter: {}",
-                                                hex
-                                            ))
-                                        })?;
-                                result.insert("_id", oid);
-                            }
                             "ne" => {
-                                let hex = val.as_str().ok_or_else(|| {
-                                    GraphQLError::Internal(
-                                        "IdFilter.ne must be a string".into(),
-                                    )
-                                })?;
-                                let oid =
-                                    mongodb::bson::oid::ObjectId::parse_str(hex)
-                                        .map_err(|_| {
-                                            GraphQLError::Internal(format!(
-                                                "Invalid ObjectId in where filter: {}",
-                                                hex
-                                            ))
-                                        })?;
-                                result.insert("_id", doc! { "$ne": oid });
+                                result.insert(mongo_key.as_str(), doc! { "$ne": oid });
                             }
-                            _ => {}
+                            _ => {
+                                // Unknown operators default to `$eq`.
+                                result.insert(mongo_key.as_str(), oid);
+                            }
                         }
+                        continue;
+                    }
+
+                    let mongo_op = operator_to_mongo(&op);
+                    if mongo_op == "$eq" {
+                        result.insert(mongo_key.as_str(), val);
+                    } else {
+                        result.insert(mongo_key.as_str(), doc! { mongo_op.as_str(): val });
                     }
                 }
-                _ => {
-                    result.insert(key, value);
-                }
             }
-        } else {
-            result.insert(key, value);
+            // Plain value → default to $eq.
+            _ => {
+                result.insert(mongo_key.as_str(), value);
+            }
         }
     }
     Ok(result)
+}
+
+/// Map a GraphQL field name to its MongoDB field name for a given collection.
+fn graphql_to_mongo_field(gql_field: &str, coll_def: &CollectionDef) -> String {
+    if gql_field == "id" {
+        return "_id".to_string();
+    }
+    coll_def
+        .fields
+        .iter()
+        .find(|f| f.graphql_name() == gql_field)
+        .map(|f| f.name.clone())
+        .unwrap_or_else(|| gql_field.to_string())
+}
+
+/// Map a GraphQL filter operator name to its MongoDB equivalent.
+/// Unknown operators default to `$eq`.
+fn operator_to_mongo(op: &str) -> String {
+    match op {
+        "eq" => "$eq".to_string(),
+        "ne" => "$ne".to_string(),
+        "gt" => "$gt".to_string(),
+        "gte" => "$gte".to_string(),
+        "lt" => "$lt".to_string(),
+        "lte" => "$lte".to_string(),
+        "contains" => "$regex".to_string(),
+        "startsWith" => "$regex".to_string(),
+        "endsWith" => "$regex".to_string(),
+        _ => "$eq".to_string(),
+    }
 }
 
 #[cfg(test)]

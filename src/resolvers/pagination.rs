@@ -1,18 +1,31 @@
 use mongodb::bson::oid::ObjectId;
 
-/// Relay pagination arguments.
+/// Relay pagination arguments — supports forward (`first`/`after`) and
+/// backward (`last`/`before`) pagination. The spec requires exactly one of
+/// `first` or `last`; providing both is an error.
 #[derive(Debug, Clone, Default)]
 pub struct PaginationArgs {
     pub first: Option<i64>,
     pub after: Option<String>,
+    pub last: Option<i64>,
+    pub before: Option<String>,
 }
 
 impl PaginationArgs {
     pub fn effective_limit(&self, max_page_size: usize) -> Result<i64, crate::error::GraphQLError> {
-        let limit = self.first.unwrap_or(20);
+        let has_first = self.first.is_some();
+        let has_last = self.last.is_some();
+
+        if has_first && has_last {
+            return Err(crate::error::GraphQLError::Pagination(
+                "Provide either 'first' or 'last', not both".into(),
+            ));
+        }
+
+        let limit = self.first.or(self.last).unwrap_or(20);
         if limit < 1 {
             return Err(crate::error::GraphQLError::Pagination(format!(
-                "first must be positive, got {}",
+                "Pagination limit must be positive, got {}",
                 limit
             )));
         }

@@ -45,10 +45,14 @@ impl CollectionDef {
     }
 
     pub fn singular_name(&self) -> String {
-        self.graphql_name
-            .as_deref()
-            .unwrap_or(&self.collection)
-            .to_lowercase()
+        let base = self.graphql_name.as_deref().unwrap_or(&self.collection);
+        let mut chars = base.chars();
+        match chars.next() {
+            None => base.to_string(),
+            Some(first_char) => {
+                first_char.to_lowercase().collect::<String>() + chars.as_str()
+            }
+        }
     }
 }
 

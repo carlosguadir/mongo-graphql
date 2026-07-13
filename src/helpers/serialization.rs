@@ -22,9 +22,9 @@ pub fn document_to_graphql_value(
             Some(bson) => {
                 map.insert(gql_name, bson_to_json(bson));
             }
-            None if field_def.required => {
-                map.insert(gql_name, serde_json::Value::Null);
-            }
+            // Omit missing fields rather than inserting null — async-graphql will
+            // enforce the non-null contract and surface a field error if a required
+            // field is absent from the MongoDB document.
             None => {}
         }
     }

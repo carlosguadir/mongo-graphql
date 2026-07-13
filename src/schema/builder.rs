@@ -146,33 +146,127 @@ impl<'a> SchemaBuilder<'a> {
         }
         builder = builder.register(update_input);
 
-        let where_input =
+        let mut where_input =
             InputObject::new(format!("{}WhereInput", type_name))
                 .field(InputValue::new("id", TypeRef::named("IdFilter")));
+        for field in &collection.fields {
+            if field.name == "id" || field.name == "_id" {
+                continue;
+            }
+            if matches!(field.field_type, FieldType::Relation(_)) {
+                continue;
+            }
+            let filter_type = filter_type_name(&field.field_type);
+            where_input =
+                where_input.field(InputValue::new(field.graphql_name(), TypeRef::named(filter_type)));
+        }
         builder = builder.register(where_input);
 
-        let sort_input =
-            InputObject::new(format!("{}SortInput", type_name))
-                .field(InputValue::new("id", TypeRef::named("SortDirection")));
+        let mut sort_input =
+            InputObject::new(format!("{}SortInput", type_name));
+        for field in &collection.fields {
+            if field.name == "id" || field.name == "_id" {
+                continue;
+            }
+            if matches!(field.field_type, FieldType::Relation(_) | FieldType::Json | FieldType::List(_)) {
+                continue;
+            }
+            sort_input =
+                sort_input.field(InputValue::new(field.graphql_name(), TypeRef::named("SortDirection")));
+        }
         builder = builder.register(sort_input);
 
         let object_ref = TypeRef::named(type_name.clone());
+        let edge_name = format!("{}Edge", type_name);
+        let edge_obj = Object::new(edge_name.clone())
+            .field(Field::new(
+                "node",
+                TypeRef::named_nn(type_name.clone()),
+                move |ctx| {
+                    let name = "node".to_string();
+                    FieldFuture::new(async move {
+                        let value = ctx
+                            .parent_value
+                            .as_value()
+                            .and_then(|parent| extract_nested(parent, &name));
+                        match value {
+                            Some(val) => Ok(Some(FieldValue::value(val))),
+                            None => Ok(None),
+                        }
+                    })
+                },
+            ))
+            .field(Field::new(
+                "cursor",
+                TypeRef::named_nn("String"),
+                move |ctx| {
+                    let name = "cursor".to_string();
+                    FieldFuture::new(async move {
+                        let value = ctx
+                            .parent_value
+                            .as_value()
+                            .and_then(|parent| extract_nested(parent, &name));
+                        match value {
+                            Some(val) => Ok(Some(FieldValue::value(val))),
+                            None => Ok(None),
+                        }
+                    })
+                },
+            ));
+        builder = builder.register(edge_obj);
+
         let conn_name = format!("{}Connection", type_name);
         let conn_obj = Object::new(conn_name.clone())
             .field(Field::new(
                 "edges",
-                TypeRef::named_nn_list(type_name.clone()),
-                |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
+                TypeRef::named_nn_list(edge_name),
+                move |ctx| {
+                    let name = "edges".to_string();
+                    FieldFuture::new(async move {
+                        let value = ctx
+                            .parent_value
+                            .as_value()
+                            .and_then(|parent| extract_nested(parent, &name));
+                        match value {
+                            Some(val) => Ok(Some(FieldValue::value(val))),
+                            None => Ok(None),
+                        }
+                    })
+                },
             ))
             .field(Field::new(
                 "pageInfo",
                 TypeRef::named_nn("PageInfo"),
-                |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
+                move |ctx| {
+                    let name = "pageInfo".to_string();
+                    FieldFuture::new(async move {
+                        let value = ctx
+                            .parent_value
+                            .as_value()
+                            .and_then(|parent| extract_nested(parent, &name));
+                        match value {
+                            Some(val) => Ok(Some(FieldValue::value(val))),
+                            None => Ok(None),
+                        }
+                    })
+                },
             ))
             .field(Field::new(
                 "totalCount",
-                TypeRef::named("Int"),
-                |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
+                TypeRef::named_nn("Int"),
+                move |ctx| {
+                    let name = "totalCount".to_string();
+                    FieldFuture::new(async move {
+                        let value = ctx
+                            .parent_value
+                            .as_value()
+                            .and_then(|parent| extract_nested(parent, &name));
+                        match value {
+                            Some(val) => Ok(Some(FieldValue::value(val))),
+                            None => Ok(None),
+                        }
+                    })
+                },
             ));
         builder = builder.register(conn_obj);
 
@@ -221,8 +315,7 @@ impl<'a> SchemaBuilder<'a> {
                         let result =
                             query::resolve_list(ctx, &coll_def, &db, page_size).await;
                         (match result {
-                            Ok(Some(value)) => json_to_field_value(value).map(Some),
-                            Ok(None) => Ok(None),
+                            Ok(value) => json_to_field_value(value).map(Some),
                             Err(e) => Err(e),
                         })
                         .map_err(|e| e.into_graphql_error())
@@ -231,6 +324,8 @@ impl<'a> SchemaBuilder<'a> {
             )
             .argument(InputValue::new("first", TypeRef::named("Int")))
             .argument(InputValue::new("after", TypeRef::named("String")))
+            .argument(InputValue::new("last", TypeRef::named("Int")))
+            .argument(InputValue::new("before", TypeRef::named("String")))
             .argument(InputValue::new("where", where_type))
             .argument(InputValue::new("sort", sort_type)),
         );
@@ -341,42 +436,59 @@ impl<'a> SchemaBuilder<'a> {
     }
 
     fn register_page_info(&self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
-        let page_info = Object::new("PageInfo")
-            .field(Field::new(
-                "hasNextPage",
-                TypeRef::named_nn("Boolean"),
-                |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
-            ))
-            .field(Field::new(
-                "hasPreviousPage",
-                TypeRef::named_nn("Boolean"),
-                |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
-            ))
-            .field(Field::new(
-                "startCursor",
-                TypeRef::named("String"),
-                |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
-            ))
-            .field(Field::new(
-                "endCursor",
-                TypeRef::named("String"),
-                |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
+        let fields = [
+            ("hasNextPage", "Boolean"),
+            ("hasPreviousPage", "Boolean"),
+            ("startCursor", "String"),
+            ("endCursor", "String"),
+        ];
+        let mut page_info = Object::new("PageInfo");
+        for (field_name, type_name) in fields {
+            let name = field_name.to_string();
+            page_info = page_info.field(Field::new(
+                field_name,
+                TypeRef::named(type_name),
+                move |ctx| {
+                    let field_name = name.clone();
+                    FieldFuture::new(async move {
+                        let value = ctx
+                            .parent_value
+                            .as_value()
+                            .and_then(|parent| extract_nested(parent, &field_name));
+                        match value {
+                            Some(val) => Ok(Some(FieldValue::value(val))),
+                            None => Ok(None),
+                        }
+                    })
+                },
             ));
+        }
         builder.register(page_info)
     }
 
     fn register_delete_result(&self, builder: AgSchemaBuilder) -> AgSchemaBuilder {
-        let delete_result = Object::new("DeleteResult")
-            .field(Field::new(
-                "success",
-                TypeRef::named_nn("Boolean"),
-                |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
-            ))
-            .field(Field::new(
-                "deletedId",
-                TypeRef::named_nn("ID"),
-                |_| FieldFuture::new(async { Ok(Some(FieldValue::NULL)) }),
+        let fields = [("success", "Boolean"), ("deletedId", "ID")];
+        let mut delete_result = Object::new("DeleteResult");
+        for (field_name, type_name) in fields {
+            let name = field_name.to_string();
+            delete_result = delete_result.field(Field::new(
+                field_name,
+                TypeRef::named_nn(type_name),
+                move |ctx| {
+                    let field_name = name.clone();
+                    FieldFuture::new(async move {
+                        let value = ctx
+                            .parent_value
+                            .as_value()
+                            .and_then(|parent| extract_nested(parent, &field_name));
+                        match value {
+                            Some(val) => Ok(Some(FieldValue::value(val))),
+                            None => Ok(None),
+                        }
+                    })
+                },
             ));
+        }
         builder.register(delete_result)
     }
 
@@ -392,6 +504,45 @@ impl<'a> SchemaBuilder<'a> {
                     .field(InputValue::new("eq", TypeRef::named("ID")))
                     .field(InputValue::new("ne", TypeRef::named("ID"))),
             )
+            .register(
+                InputObject::new("StringFilter")
+                    .field(InputValue::new("eq", TypeRef::named("String")))
+                    .field(InputValue::new("ne", TypeRef::named("String")))
+                    .field(InputValue::new("contains", TypeRef::named("String")))
+                    .field(InputValue::new("startsWith", TypeRef::named("String")))
+                    .field(InputValue::new("endsWith", TypeRef::named("String"))),
+            )
+            .register(
+                InputObject::new("IntFilter")
+                    .field(InputValue::new("eq", TypeRef::named("Int")))
+                    .field(InputValue::new("ne", TypeRef::named("Int")))
+                    .field(InputValue::new("gt", TypeRef::named("Int")))
+                    .field(InputValue::new("gte", TypeRef::named("Int")))
+                    .field(InputValue::new("lt", TypeRef::named("Int")))
+                    .field(InputValue::new("lte", TypeRef::named("Int"))),
+            )
+            .register(
+                InputObject::new("FloatFilter")
+                    .field(InputValue::new("eq", TypeRef::named("Float")))
+                    .field(InputValue::new("ne", TypeRef::named("Float")))
+                    .field(InputValue::new("gt", TypeRef::named("Float")))
+                    .field(InputValue::new("gte", TypeRef::named("Float")))
+                    .field(InputValue::new("lt", TypeRef::named("Float")))
+                    .field(InputValue::new("lte", TypeRef::named("Float"))),
+            )
+            .register(
+                InputObject::new("BooleanFilter")
+                    .field(InputValue::new("eq", TypeRef::named("Boolean"))),
+            )
+            .register(
+                InputObject::new("DateTimeFilter")
+                    .field(InputValue::new("eq", TypeRef::named("DateTime")))
+                    .field(InputValue::new("ne", TypeRef::named("DateTime")))
+                    .field(InputValue::new("gt", TypeRef::named("DateTime")))
+                    .field(InputValue::new("gte", TypeRef::named("DateTime")))
+                    .field(InputValue::new("lt", TypeRef::named("DateTime")))
+                    .field(InputValue::new("lte", TypeRef::named("DateTime"))),
+            )
     }
 }
 
@@ -400,5 +551,21 @@ fn extract_nested(parent: &async_graphql::Value, field_name: &str) -> Option<asy
     match parent {
         async_graphql::Value::Object(map) => map.get(field_name).cloned(),
         _ => None,
+    }
+}
+
+/// Map a `FieldType` to the name of its corresponding filter input type.
+fn filter_type_name(field_type: &FieldType) -> &'static str {
+    match field_type {
+        FieldType::ID => "IdFilter",
+        FieldType::String => "StringFilter",
+        FieldType::Int => "IntFilter",
+        FieldType::Float => "FloatFilter",
+        FieldType::Boolean => "BooleanFilter",
+        FieldType::DateTime => "DateTimeFilter",
+        // TODO there will be a feature to add filter in json fields
+        FieldType::Json => "StringFilter",
+        FieldType::List(_) => "StringFilter",
+        FieldType::Relation(_) => "IdFilter",
     }
 }
