@@ -2,6 +2,7 @@ use async_graphql::ErrorExtensions;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum GraphQLError {
     #[error("Config error: {0}")]
     Config(String),
@@ -65,11 +66,13 @@ impl GraphQLError {
                     extensions.set("code", "INVALID_CURSOR");
                 })
             }
-            GraphQLError::Database(_) | GraphQLError::Internal(_) => {
-                // Internal errors: message hidden from client.
+            GraphQLError::Database(_)
+            | GraphQLError::Internal(_)
+            | GraphQLError::SchemaParse { .. }
+            | GraphQLError::SchemaBuild(_)
+            | GraphQLError::Config(_) => {
                 async_graphql::Error::new("Internal server error")
             }
-            _ => async_graphql::Error::new(message),
         }
     }
 }

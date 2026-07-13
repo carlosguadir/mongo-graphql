@@ -21,7 +21,7 @@ pub async fn resolve_get(
         .deserialize()
         .map_err(|e| GraphQLError::Internal(e.message))?;
 
-    let filter = transform_id_filter(where_input);
+    let filter = transform_id_filter(where_input)?;
 
     let document = coll
         .find_one(filter)
@@ -46,15 +46,18 @@ pub async fn resolve_list(
     let after: Option<String> = try_deserialize_optional(&ctx.args, "after")?;
 
     let pagination = PaginationArgs { first, after };
-    let limit = pagination.effective_limit(max_page_size);
+    let limit = pagination.effective_limit(max_page_size)?;
 
-    let mut filter: mongodb::bson::Document =
+    let raw_filter: mongodb::bson::Document =
         try_deserialize_optional(&ctx.args, "where")?.unwrap_or_default();
+    let base_filter = transform_where_filter(raw_filter)?;
 
-    if let Some(after) = &pagination.after {
+    let filter = if let Some(after) = &pagination.after {
         let cursor_id = decode_cursor(after)?;
-        filter = doc! { "$and": [filter, doc! { "_id": { "$gt": cursor_id } }] };
-    }
+        doc! { "$and": [base_filter.clone(), doc! { "_id": { "$gt": cursor_id } }] }
+    } else {
+        base_filter.clone()
+    };
 
     let sort: mongodb::bson::Document =
         try_deserialize_optional(&ctx.args, "sort")?.unwrap_or_else(|| doc! { "_id": 1 });
@@ -92,15 +95,29 @@ pub async fn resolve_list(
         .and_then(|document| document.get_object_id("_id").ok())
         .map(|id| encode_cursor(&id));
 
+    let has_previous = if let Some(first_doc) = docs.first() {
+        if let Ok(first_oid) = first_doc.get_object_id("_id") {
+            let prev_filter =
+                doc! { "$and": [base_filter.clone(), doc! { "_id": { "$lt": first_oid } }] };
+            coll.find_one(prev_filter).await?.is_some()
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    let total_count = coll.count_documents(base_filter).await?;
+
     Ok(Some(serde_json::json!({
         "edges": edges,
         "pageInfo": {
             "hasNextPage": has_next,
-            "hasPreviousPage": pagination.after.is_some(),
+            "hasPreviousPage": has_previous,
             "startCursor": start_cursor,
             "endCursor": end_cursor,
         },
-        "totalCount": serde_json::Value::Null
+        "totalCount": total_count as i64
     })))
 }
 
@@ -111,23 +128,88 @@ pub(crate) fn try_deserialize_optional<T: serde::de::DeserializeOwned>(
     name: &str,
 ) -> Result<Option<T>, GraphQLError> {
     match args.get(name) {
-        Some(value) => value
-            .deserialize()
-            .map(Some)
-            .map_err(|e| GraphQLError::Internal(e.message)),
+        Some(value) => value.deserialize().map(Some).map_err(|e| {
+            GraphQLError::Internal(format!(
+                "Failed to parse argument '{}': {}",
+                name, e.message
+            ))
+        }),
         None => Ok(None),
     }
 }
 
 /// Transform a where input that may use `id` (hex string) to `_id` (ObjectId).
 /// MongoDB stores the primary key as `_id`, but GraphQL exposes it as `id`.
-pub(crate) fn transform_id_filter(mut filter: mongodb::bson::Document) -> mongodb::bson::Document {
+pub(crate) fn transform_id_filter(
+    mut filter: mongodb::bson::Document,
+) -> Result<mongodb::bson::Document, GraphQLError> {
     if let Some(mongodb::bson::Bson::String(hex)) = filter.remove("id") {
-        if let Ok(oid) = mongodb::bson::oid::ObjectId::parse_str(&hex) {
-            filter.insert("_id", oid);
+        let oid = mongodb::bson::oid::ObjectId::parse_str(&hex).map_err(|_| {
+            GraphQLError::Internal(format!("Invalid ObjectId: {}", hex))
+        })?;
+        filter.insert("_id", oid);
+    }
+    Ok(filter)
+}
+
+/// Translate a GraphQL `WhereInput` filter into MongoDB query operators.
+/// Converts IdFilter structures: `{"id": {"eq": "hex"}}` → `{"_id": ObjectId("hex")}`
+/// and `{"id": {"ne": "hex"}}` → `{"_id": {"$ne": ObjectId("hex")}}`.
+fn transform_where_filter(
+    filter: mongodb::bson::Document,
+) -> Result<mongodb::bson::Document, GraphQLError> {
+    let mut result = mongodb::bson::Document::new();
+    for (key, value) in filter {
+        if key == "id" {
+            match value {
+                mongodb::bson::Bson::Document(id_filter) => {
+                    for (op, val) in id_filter {
+                        match op.as_str() {
+                            "eq" => {
+                                let hex = val.as_str().ok_or_else(|| {
+                                    GraphQLError::Internal(
+                                        "IdFilter.eq must be a string".into(),
+                                    )
+                                })?;
+                                let oid =
+                                    mongodb::bson::oid::ObjectId::parse_str(hex)
+                                        .map_err(|_| {
+                                            GraphQLError::Internal(format!(
+                                                "Invalid ObjectId in where filter: {}",
+                                                hex
+                                            ))
+                                        })?;
+                                result.insert("_id", oid);
+                            }
+                            "ne" => {
+                                let hex = val.as_str().ok_or_else(|| {
+                                    GraphQLError::Internal(
+                                        "IdFilter.ne must be a string".into(),
+                                    )
+                                })?;
+                                let oid =
+                                    mongodb::bson::oid::ObjectId::parse_str(hex)
+                                        .map_err(|_| {
+                                            GraphQLError::Internal(format!(
+                                                "Invalid ObjectId in where filter: {}",
+                                                hex
+                                            ))
+                                        })?;
+                                result.insert("_id", doc! { "$ne": oid });
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {
+                    result.insert(key, value);
+                }
+            }
+        } else {
+            result.insert(key, value);
         }
     }
-    filter
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -139,7 +221,7 @@ mod tests {
     fn test_transform_id_filter_converts_hex_to_object_id() {
         let oid = ObjectId::new();
         let filter = doc! { "id": oid.to_hex() };
-        let result = transform_id_filter(filter);
+        let result = transform_id_filter(filter).unwrap();
         assert_eq!(result.get("_id"), Some(&Bson::ObjectId(oid)));
         assert!(!result.contains_key("id"));
     }
@@ -148,7 +230,7 @@ mod tests {
     fn test_transform_id_filter_preserves_other_fields() {
         let oid = ObjectId::new();
         let filter = doc! { "id": oid.to_hex(), "alias": "TestHero" };
-        let result = transform_id_filter(filter);
+        let result = transform_id_filter(filter).unwrap();
         assert_eq!(result.get("_id"), Some(&Bson::ObjectId(oid)));
         assert_eq!(
             result.get("alias"),
@@ -157,24 +239,23 @@ mod tests {
     }
 
     #[test]
-    fn test_transform_id_filter_invalid_hex_ignored() {
+    fn test_transform_id_filter_invalid_hex_returns_error() {
         let filter = doc! { "id": "not-a-valid-hex" };
         let result = transform_id_filter(filter);
-        assert!(!result.contains_key("_id"));
-        assert!(!result.contains_key("id"));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_transform_id_filter_no_id_field_unchanged() {
         let filter = doc! { "alias": "TestHero", "active": true };
-        let result = transform_id_filter(filter.clone());
+        let result = transform_id_filter(filter.clone()).unwrap();
         assert_eq!(result, filter);
     }
 
     #[test]
     fn test_transform_id_filter_empty_document() {
         let filter = doc! {};
-        let result = transform_id_filter(filter.clone());
+        let result = transform_id_filter(filter.clone()).unwrap();
         assert_eq!(result, filter);
     }
 }

@@ -41,9 +41,7 @@ pub fn bson_to_json(bson: &Bson) -> serde_json::Value {
         Bson::Int64(i) => serde_json::Value::Number((*i).into()),
         Bson::Double(f) => serde_json::Number::from_f64(*f)
             .map(serde_json::Value::Number)
-            .unwrap_or_else(|| {
-                serde_json::Value::String(f.to_string())
-            }),
+            .unwrap_or(serde_json::Value::Null),
         Bson::Boolean(b) => serde_json::Value::Bool(*b),
         Bson::DateTime(dt) => {
             let millis = dt.timestamp_millis();

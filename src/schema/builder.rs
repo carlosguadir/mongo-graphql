@@ -32,7 +32,13 @@ impl<'a> SchemaBuilder<'a> {
         }
     }
 
-    pub fn build(mut self, db: Database) -> Result<Schema, GraphQLError> {
+    pub async fn build(mut self, db: Database) -> Result<Schema, GraphQLError> {
+        let mut ping_cmd = mongodb::bson::Document::new();
+        ping_cmd.insert("ping", 1);
+        db.run_command(ping_cmd)
+            .await
+            .map_err(|e| GraphQLError::Database(format!("Database ping failed: {}", e)))?;
+
         let mut builder = Schema::build("Query", Some("Mutation"), None);
         builder = scalars::register_all(builder);
         builder = self.register_page_info(builder);

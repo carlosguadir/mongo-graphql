@@ -24,7 +24,7 @@ pub(crate) fn to_pascal_singular(s: &str) -> String {
             let mut chars = seg.chars();
             match chars.next() {
                 None => String::new(),
-                Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+                Some(first_char) => first_char.to_uppercase().collect::<String>() + chars.as_str(),
             }
         })
         .collect()

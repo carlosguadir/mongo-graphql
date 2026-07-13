@@ -8,9 +8,15 @@ pub struct PaginationArgs {
 }
 
 impl PaginationArgs {
-    pub fn effective_limit(&self, max_page_size: usize) -> i64 {
+    pub fn effective_limit(&self, max_page_size: usize) -> Result<i64, crate::error::GraphQLError> {
         let limit = self.first.unwrap_or(20);
-        limit.min(max_page_size as i64).max(1)
+        if limit < 1 {
+            return Err(crate::error::GraphQLError::Pagination(format!(
+                "first must be positive, got {}",
+                limit
+            )));
+        }
+        Ok(limit.min(max_page_size as i64))
     }
 }
 

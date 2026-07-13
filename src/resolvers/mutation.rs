@@ -74,10 +74,20 @@ pub async fn resolve_update(
     update_input.remove("_id");
     update_input.remove("id");
 
-    let filter = transform_id_filter(where_input);
+    let filter = transform_id_filter(where_input)?;
 
-    coll.update_one(filter.clone(), doc! { "$set": &update_input })
+    let update_result = coll
+        .update_one(filter.clone(), doc! { "$set": &update_input })
         .await?;
+
+    if update_result.matched_count == 0 {
+        return Err(GraphQLError::NotFound {
+            message: format!(
+                "Document not found in '{}' for update",
+                coll_def.collection
+            ),
+        });
+    }
 
     let updated = coll
         .find_one(filter)
@@ -107,11 +117,16 @@ pub async fn resolve_delete(
         .map_err(|e| GraphQLError::Internal(e.message))?;
 
     let id = where_input
-        .get("id")
-        .cloned()
-        .ok_or_else(|| GraphQLError::Internal("where.id is required for delete".into()))?;
+        .get_str("id")
+        .map(|s| s.to_owned())
+        .or_else(|_| {
+            where_input
+                .get_object_id("id")
+                .map(|oid| oid.to_hex())
+        })
+        .map_err(|_| GraphQLError::Internal("where.id is required for delete".into()))?;
 
-    let filter = transform_id_filter(where_input);
+    let filter = transform_id_filter(where_input)?;
     let result = coll.delete_one(filter).await?;
 
     Ok(Some(serde_json::json!({
@@ -125,6 +140,9 @@ fn is_duplicate_key_error(error: &mongodb::error::Error) -> bool {
         mongodb::error::ErrorKind::Write(write_failure) => match write_failure {
             mongodb::error::WriteFailure::WriteError(write_error) => {
                 write_error.code == 11000 || write_error.code == 11001
+            }
+            mongodb::error::WriteFailure::WriteConcernError(write_concern_error) => {
+                write_concern_error.code == 11000 || write_concern_error.code == 11001
             }
             _ => false,
         },

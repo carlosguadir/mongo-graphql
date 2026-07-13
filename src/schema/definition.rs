@@ -4,17 +4,19 @@ use serde::{Deserialize, Serialize};
 use super::inflect::{to_pascal_singular, to_plural};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SchemaDefinition {
     pub collections: Vec<CollectionDef>,
 }
 
 impl SchemaDefinition {
     pub fn collection_by_name(&self, name: &str) -> Option<&CollectionDef> {
-        self.collections.iter().find(|c| c.collection == name)
+        self.collections.iter().find(|coll_def| coll_def.collection == name)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CollectionDef {
     pub collection: String,
 
@@ -35,15 +37,23 @@ impl CollectionDef {
     }
 
     pub fn plural_name(&self) -> String {
-        to_plural(&self.collection)
+        let base = self
+            .graphql_name
+            .as_deref()
+            .unwrap_or(&self.collection);
+        to_plural(&base.to_lowercase())
     }
 
     pub fn singular_name(&self) -> String {
-        self.collection.clone()
+        self.graphql_name
+            .as_deref()
+            .unwrap_or(&self.collection)
+            .to_lowercase()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FieldDef {
     pub name: String,
 
@@ -127,12 +137,19 @@ impl<'de> Deserialize<'de> for FieldType {
                     serde_json::from_value(rel_value).map_err(de::Error::custom)?;
                 Ok(FieldType::Relation(rel))
             }
-            _ => Err(de::Error::custom("expected string, [type], or relation object")),
+            Value::Array(ref arr) if arr.len() != 1 => Err(de::Error::custom(format!(
+                "list type must contain exactly one element, got {}",
+                arr.len()
+            ))),
+            _ => Err(de::Error::custom(
+                "expected a type string (e.g. \"String\"), a list type (e.g. [\"String\"]), or a relation object",
+            )),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationFieldDef {
     pub kind: RelationKind,
     pub collection: String,
@@ -159,12 +176,14 @@ pub enum RelationKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EnumDef {
     pub name: String,
     pub values: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct JunctionDef {
     pub collection: String,
     pub local_field: String,

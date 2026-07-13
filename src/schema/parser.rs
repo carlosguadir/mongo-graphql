@@ -21,7 +21,7 @@ impl SchemaParser {
 
     fn validate_referenced_collections(schema: &SchemaDefinition) -> Result<(), GraphQLError> {
         let names: std::collections::HashSet<&str> =
-            schema.collections.iter().map(|c| c.collection.as_str()).collect();
+            schema.collections.iter().map(|coll_def| coll_def.collection.as_str()).collect();
 
         for coll in &schema.collections {
             for field in &coll.fields {
@@ -48,6 +48,37 @@ impl SchemaParser {
 
     fn validate_fields(schema: &SchemaDefinition) -> Result<(), GraphQLError> {
         for coll in &schema.collections {
+            // Check for duplicate field names within the collection.
+            let mut field_names = std::collections::HashSet::new();
+            let mut gql_names = std::collections::HashSet::new();
+            for field in &coll.fields {
+                if !field_names.insert(&field.name) {
+                    return Err(GraphQLError::SchemaParse {
+                        message: format!(
+                            "Duplicate field name '{}' in collection '{}'",
+                            field.name, coll.collection
+                        ),
+                        location: format!(
+                            "$.collections.{}.fields.{}",
+                            coll.collection, field.name
+                        ),
+                    });
+                }
+                let gql_name = field.graphql_name();
+                if !gql_names.insert(gql_name.clone()) {
+                    return Err(GraphQLError::SchemaParse {
+                        message: format!(
+                            "Duplicate GraphQL field name '{}' in collection '{}'",
+                            gql_name, coll.collection
+                        ),
+                        location: format!(
+                            "$.collections.{}.fields.{}",
+                            coll.collection, field.name
+                        ),
+                    });
+                }
+            }
+
             for field in &coll.fields {
                 if let Some(enum_def) = &field.r#enum {
                     if enum_def.values.is_empty() {
@@ -69,6 +100,18 @@ impl SchemaParser {
                             return Err(GraphQLError::SchemaParse {
                                 message: format!(
                                     "Enum '{}' has duplicate value '{}' in {}.{}",
+                                    enum_def.name, val, coll.collection, field.name
+                                ),
+                                location: format!(
+                                    "$.collections.{}.fields.{}.enum.values",
+                                    coll.collection, field.name
+                                ),
+                            });
+                        }
+                        if !is_valid_graphql_identifier(val) {
+                            return Err(GraphQLError::SchemaParse {
+                                message: format!(
+                                    "Enum '{}' has invalid GraphQL identifier '{}' in {}.{}",
                                     enum_def.name, val, coll.collection, field.name
                                 ),
                                 location: format!(
@@ -124,5 +167,15 @@ impl SchemaParser {
         }
 
         Ok(())
+    }
+}
+
+fn is_valid_graphql_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(first_char) if first_char.is_ascii_alphabetic() || first_char == '_' => {
+            chars.all(|rest_char| rest_char.is_ascii_alphanumeric() || rest_char == '_')
+        }
+        _ => false,
     }
 }
