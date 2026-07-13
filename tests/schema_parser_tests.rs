@@ -113,6 +113,87 @@ fn test_duplicate_enum_values_rejected() {
 }
 
 #[test]
+fn test_invalid_reference_field_rejected() {
+    let json = r#"{
+        "collections": [
+            {
+                "collection": "hero",
+                "fields": [
+                    { "name": "id", "type": "ID", "required": true },
+                    {
+                        "name": "team_id",
+                        "type": { "relation": { "kind": "one_to_many", "collection": "team", "reference_field": "nonexistent_field" } }
+                    }
+                ]
+            },
+            {
+                "collection": "team",
+                "fields": [
+                    { "name": "id", "type": "ID", "required": true },
+                    { "name": "name", "type": "String", "required": true }
+                ]
+            }
+        ]
+    }"#;
+    let result = SchemaParser::from_str(json);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("reference_field"));
+}
+
+#[test]
+fn test_invalid_junction_field_rejected() {
+    let json = r#"{
+        "collections": [
+            {
+                "collection": "hero",
+                "fields": [
+                    { "name": "id", "type": "ID", "required": true },
+                    {
+                        "name": "missions",
+                        "type": {
+                            "relation": {
+                                "kind": "many_to_many",
+                                "collection": "mission",
+                                "reference_field": "id",
+                                "junction": { "collection": "hero_mission", "local_field": "hero_id", "foreign_field": "ghost_field", "foreign_reference": "id", "metadata_fields": [] }
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "collection": "mission",
+                "fields": [
+                    { "name": "id", "type": "ID", "required": true },
+                    {
+                        "name": "heroes",
+                        "type": {
+                            "relation": {
+                                "kind": "many_to_many",
+                                "collection": "hero",
+                                "reference_field": "id",
+                                "junction": { "collection": "hero_mission", "local_field": "mission_id", "foreign_field": "hero_id", "foreign_reference": "id", "metadata_fields": [] }
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "collection": "hero_mission",
+                "fields": [
+                    { "name": "id", "type": "ID", "required": true },
+                    { "name": "hero_id", "type": "ID", "required": true },
+                    { "name": "mission_id", "type": "ID", "required": true }
+                ]
+            }
+        ]
+    }"#;
+    let result = SchemaParser::from_str(json);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("junction field"));
+}
+
+#[test]
 fn test_three_sides_many_to_many_rejected() {
     // 3 lados para la misma junction → error
     let json = r#"{
