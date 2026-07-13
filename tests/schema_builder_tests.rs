@@ -2,7 +2,7 @@ use graphql_mongodb_lib::schema::definition::SchemaDefinition;
 use graphql_mongodb_lib::schema::parser::SchemaParser;
 
 fn load_definition() -> SchemaDefinition {
-    let json = include_str!("../schema-definition.json");
+    let json = include_str!("schema-definition.json");
     SchemaParser::from_str(json).expect("schema-definition.json must be valid")
 }
 

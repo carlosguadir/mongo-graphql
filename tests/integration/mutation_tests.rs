@@ -1,36 +1,57 @@
 #[cfg(feature = "integration")]
 mod tests {
     use mongodb::bson::{doc, oid::ObjectId};
-    use graphql_mongodb_lib::executor::GraphQLExecutor;
+    use mongodb::Database;
+    use tokio::sync::OnceCell;
+
+    use graphql_mongodb_lib::executor;
     use graphql_mongodb_lib::schema::builder::{RuntimeConfig, SchemaBuilder};
     use graphql_mongodb_lib::schema::parser::SchemaParser;
     use mongodb::Client;
 
-    async fn setup() -> async_graphql::dynamic::Schema {
-        let mongo_uri =
-            std::env::var("MONGO_URI").unwrap_or_else(|_| "mongodb://localhost:27017".into());
-        let client = Client::with_uri_str(&mongo_uri).await.unwrap();
-        let db = client.database("test_graphql_mongodb");
+    static DB: OnceCell<Database> = OnceCell::const_new();
+    static SCHEMA: OnceCell<async_graphql::dynamic::Schema> = OnceCell::const_new();
 
-        let _ = db.collection::<mongodb::bson::Document>("hero").drop().await;
+    async fn get_db() -> &'static Database {
+        DB.get_or_init(|| async {
+            let mongo_uri = std::env::var("MONGO_URI")
+                .unwrap_or_else(|_| "mongodb://localhost:27017".into());
+            let client = Client::with_uri_str(&mongo_uri).await.unwrap();
+            client.database("test_graphql_mongodb")
+        })
+        .await
+    }
 
-        let json = include_str!("../../schema-definition.json");
-        let definition = SchemaParser::from_str(json).expect("schema must be valid");
+    async fn get_schema() -> &'static async_graphql::dynamic::Schema {
+        SCHEMA
+            .get_or_init(|| async {
+                let db = get_db().await.clone();
+                let json = include_str!("../schema-definition.json");
+                let definition =
+                    SchemaParser::from_str(json).expect("schema must be valid");
+                let config = RuntimeConfig {
+                    max_page_size: 100,
+                };
+                SchemaBuilder::new(&config, &definition)
+                    .build(db)
+                    .await
+                    .expect("schema build")
+            })
+            .await
+    }
 
-        let config = RuntimeConfig {
-            max_page_size: 100,
-        };
-
-        SchemaBuilder::new(&config, &definition)
-            .build(db)
-            .expect("schema build")
+    async fn clean_collection(name: &str) {
+        let db = get_db().await;
+        let _ = db.collection::<mongodb::bson::Document>(name).drop().await;
     }
 
     #[tokio::test]
     async fn test_create_hero() {
-        let schema = setup().await;
-        let result = GraphQLExecutor::execute(
-            &schema,
+        clean_collection("hero").await;
+        let schema = get_schema().await;
+
+        let result = executor::execute(
+            schema,
             r#"mutation {
                 createHero(input: {
                     alias: "NewHero",
@@ -46,7 +67,6 @@ mod tests {
         .await
         .unwrap();
 
-        // Check for errors
         if let Some(errors) = result.get("errors") {
             panic!("GraphQL errors: {:?}", errors);
         }
@@ -59,11 +79,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_hero() {
-        let schema = setup().await;
+        clean_collection("hero").await;
+        let schema = get_schema().await;
 
-        // First create
-        let create = GraphQLExecutor::execute(
-            &schema,
+        let create = executor::execute(
+            schema,
             r#"mutation {
                 createHero(input: {
                     alias: "UpdateMe",
@@ -80,9 +100,8 @@ mod tests {
 
         let id = create["data"]["createHero"]["id"].as_str().unwrap().to_string();
 
-        // Then update
-        let result = GraphQLExecutor::execute(
-            &schema,
+        let result = executor::execute(
+            schema,
             &format!(
                 r#"mutation {{
                     updateHero(where: {{ id: "{}" }}, input: {{ alias: "Updated" }}) {{
@@ -104,11 +123,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_hero() {
-        let schema = setup().await;
+        clean_collection("hero").await;
+        let schema = get_schema().await;
 
-        // Create first
-        let create = GraphQLExecutor::execute(
-            &schema,
+        let create = executor::execute(
+            schema,
             r#"mutation {
                 createHero(input: {
                     alias: "DeleteMe",
@@ -125,9 +144,8 @@ mod tests {
 
         let id = create["data"]["createHero"]["id"].as_str().unwrap().to_string();
 
-        // Delete
-        let result = GraphQLExecutor::execute(
-            &schema,
+        let result = executor::execute(
+            schema,
             &format!(
                 r#"mutation {{
                     deleteHero(where: {{ id: "{}" }}) {{

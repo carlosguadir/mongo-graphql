@@ -2,7 +2,7 @@ use graphql_mongodb_lib::schema::definition::{FieldType, RelationKind, SchemaDef
 use graphql_mongodb_lib::schema::parser::SchemaParser;
 
 fn load_test_schema() -> SchemaDefinition {
-    let json = include_str!("../schema-definition.json");
+    let json = include_str!("schema-definition.json");
     SchemaParser::from_str(json).expect("schema-definition.json must be valid")
 }
 
@@ -14,7 +14,7 @@ fn test_parse_real_schema_six_collections() {
     let names: Vec<&str> = schema
         .collections
         .iter()
-        .map(|c| c.collection.as_str())
+        .map(|coll_def| coll_def.collection.as_str())
         .collect();
     assert!(names.contains(&"hero"));
     assert!(names.contains(&"villain"));

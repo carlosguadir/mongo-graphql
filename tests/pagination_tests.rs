@@ -17,7 +17,7 @@ fn test_decode_invalid_cursor() {
 #[test]
 fn test_pagination_defaults() {
     let args = PaginationArgs::default();
-    assert_eq!(args.effective_limit(100), 20);
+    assert_eq!(args.effective_limit(100).unwrap(), 20);
 }
 
 #[test]
@@ -26,7 +26,7 @@ fn test_pagination_clamped_to_max() {
         first: Some(500),
         after: None,
     };
-    assert_eq!(args.effective_limit(100), 100);
+    assert_eq!(args.effective_limit(100).unwrap(), 100);
 }
 
 #[test]
@@ -35,5 +35,23 @@ fn test_pagination_explicit_first() {
         first: Some(5),
         after: None,
     };
-    assert_eq!(args.effective_limit(100), 5);
+    assert_eq!(args.effective_limit(100).unwrap(), 5);
+}
+
+#[test]
+fn test_pagination_negative_first_rejected() {
+    let args = PaginationArgs {
+        first: Some(-5),
+        after: None,
+    };
+    assert!(args.effective_limit(100).is_err());
+}
+
+#[test]
+fn test_pagination_zero_first_rejected() {
+    let args = PaginationArgs {
+        first: Some(0),
+        after: None,
+    };
+    assert!(args.effective_limit(100).is_err());
 }
