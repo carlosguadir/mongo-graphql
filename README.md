@@ -1,4 +1,4 @@
-# graphql-mongodb-lib
+# mongo-graphql
 
 Dynamic GraphQL schema generation from MongoDB collections, optimized for AWS Lambda.
 
@@ -58,8 +58,8 @@ Given a JSON schema definition describing your MongoDB collections, this library
 ### 2. Build the schema
 
 ```rust
-use graphql_mongodb_lib::schema::builder::{RuntimeConfig, SchemaBuilder};
-use graphql_mongodb_lib::schema::parser::SchemaParser;
+use mongo_graphql::schema::builder::{RuntimeConfig, SchemaBuilder};
+use mongo_graphql::schema::parser::SchemaParser;
 
 let json = std::fs::read_to_string("schema-definition.json")?;
 let definition = SchemaParser::from_str(&json)?;
@@ -73,7 +73,7 @@ let schema = SchemaBuilder::new(&config, &definition)
 ### 3. Execute queries
 
 ```rust
-use graphql_mongodb_lib::executor;
+use mongo_graphql::executor;
 
 let result = executor::execute(
     &schema,

@@ -1,4 +1,4 @@
-use graphql_mongodb_lib::schema::parser::SchemaParser;
+use mongo_graphql::schema::parser::SchemaParser;
 
 #[test]
 fn test_empty_collections_is_valid() {

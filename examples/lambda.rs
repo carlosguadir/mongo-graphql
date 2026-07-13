@@ -5,9 +5,9 @@ use aws_lambda_events::encodings::Body;
 use lambda_runtime::{run as run_lambda, service_fn, Error, LambdaEvent};
 use mongodb::Client;
 
-use graphql_mongodb_lib::executor;
-use graphql_mongodb_lib::schema::builder::{RuntimeConfig, SchemaBuilder};
-use graphql_mongodb_lib::schema::parser::SchemaParser;
+use mongo_graphql::executor;
+use mongo_graphql::schema::builder::{RuntimeConfig, SchemaBuilder};
+use mongo_graphql::schema::parser::SchemaParser;
 
 /// Schema definition embedded at compile time.
 const DEFAULT_SCHEMA: &str = include_str!("../tests/schema-definition.json");

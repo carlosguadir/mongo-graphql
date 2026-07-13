@@ -4,9 +4,9 @@ mod tests {
     use mongodb::Database;
     use tokio::sync::OnceCell;
 
-    use graphql_mongodb_lib::executor;
-    use graphql_mongodb_lib::schema::builder::{RuntimeConfig, SchemaBuilder};
-    use graphql_mongodb_lib::schema::parser::SchemaParser;
+    use mongo_graphql::executor;
+    use mongo_graphql::schema::builder::{RuntimeConfig, SchemaBuilder};
+    use mongo_graphql::schema::parser::SchemaParser;
     use mongodb::Client;
 
     static DB: OnceCell<Database> = OnceCell::const_new();

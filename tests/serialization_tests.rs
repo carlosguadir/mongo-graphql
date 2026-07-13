@@ -1,5 +1,5 @@
 use mongodb::bson::{doc, oid::ObjectId, Bson};
-use graphql_mongodb_lib::helpers::serialization::bson_to_json;
+use mongo_graphql::helpers::serialization::bson_to_json;
 use serde_json::Value;
 
 #[test]

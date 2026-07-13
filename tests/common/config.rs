@@ -1,4 +1,4 @@
-use graphql_mongodb_lib::error::GraphQLError;
+use mongo_graphql::error::GraphQLError;
 
 /// Dev/test configuration. Not part of the core library API.
 #[derive(Debug, Clone)]

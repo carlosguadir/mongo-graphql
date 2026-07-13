@@ -1,5 +1,5 @@
-use graphql_mongodb_lib::schema::definition::{FieldType, RelationKind, SchemaDefinition};
-use graphql_mongodb_lib::schema::parser::SchemaParser;
+use mongo_graphql::schema::definition::{FieldType, RelationKind, SchemaDefinition};
+use mongo_graphql::schema::parser::SchemaParser;
 
 fn load_test_schema() -> SchemaDefinition {
     let json = include_str!("schema-definition.json");

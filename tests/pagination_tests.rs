@@ -1,5 +1,5 @@
 use mongodb::bson::oid::ObjectId;
-use graphql_mongodb_lib::resolvers::pagination::{decode_cursor, encode_cursor, PaginationArgs};
+use mongo_graphql::resolvers::pagination::{decode_cursor, encode_cursor, PaginationArgs};
 
 #[test]
 fn test_encode_decode_roundtrip() {

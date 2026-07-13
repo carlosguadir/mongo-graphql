@@ -1,5 +1,5 @@
-use graphql_mongodb_lib::schema::definition::SchemaDefinition;
-use graphql_mongodb_lib::schema::parser::SchemaParser;
+use mongo_graphql::schema::definition::SchemaDefinition;
+use mongo_graphql::schema::parser::SchemaParser;
 
 fn load_definition() -> SchemaDefinition {
     let json = include_str!("schema-definition.json");
