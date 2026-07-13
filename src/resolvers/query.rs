@@ -114,14 +114,7 @@ pub async fn resolve_list(
 
     let edges: Vec<serde_json::Value> = docs
         .iter()
-        .map(|document| {
-            let node = document_to_graphql_value(document, coll_def);
-            let cursor = document
-                .get_object_id("_id")
-                .map(|id| encode_cursor(&id))
-                .unwrap_or_default();
-            serde_json::json!({ "node": node, "cursor": cursor })
-        })
+        .map(|document| document_to_graphql_value(document, coll_def))
         .collect();
 
     let start_cursor = docs

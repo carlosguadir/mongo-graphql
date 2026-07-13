@@ -9,7 +9,7 @@ use mongodb::Database;
 use crate::error::GraphQLError;
 use crate::helpers::serialization::json_to_field_value;
 use crate::resolvers::{mutation, query};
-use crate::schema::definition::{CollectionDef, EnumDef, FieldType, SchemaDefinition};
+use crate::schema::definition::{CollectionDef, EnumDef, FieldType, RelationKind, SchemaDefinition};
 use crate::types::scalars;
 
 #[derive(Debug, Clone)]
@@ -118,7 +118,12 @@ impl<'a> SchemaBuilder<'a> {
             if field.name == "id" || field.name == "_id" {
                 continue;
             }
-            if matches!(field.field_type, FieldType::Relation(_)) {
+            if let FieldType::Relation(rel) = &field.field_type {
+                if matches!(rel.kind, RelationKind::ManyToMany) {
+                    continue;
+                }
+                create_input =
+                    create_input.field(InputValue::new(field.graphql_name(), TypeRef::named("ID")));
                 continue;
             }
             let field_type = scalars::type_ref(&field.field_type);
@@ -137,7 +142,12 @@ impl<'a> SchemaBuilder<'a> {
             if field.name == "id" || field.name == "_id" {
                 continue;
             }
-            if matches!(field.field_type, FieldType::Relation(_)) {
+            if let FieldType::Relation(rel) = &field.field_type {
+                if matches!(rel.kind, RelationKind::ManyToMany) {
+                    continue;
+                }
+                update_input =
+                    update_input.field(InputValue::new(field.graphql_name(), TypeRef::named("ID")));
                 continue;
             }
             let field_type = scalars::type_ref(&field.field_type);
@@ -177,49 +187,12 @@ impl<'a> SchemaBuilder<'a> {
         builder = builder.register(sort_input);
 
         let object_ref = TypeRef::named(type_name.clone());
-        let edge_name = format!("{}Edge", type_name);
-        let edge_obj = Object::new(edge_name.clone())
-            .field(Field::new(
-                "node",
-                TypeRef::named_nn(type_name.clone()),
-                move |ctx| {
-                    let name = "node".to_string();
-                    FieldFuture::new(async move {
-                        let value = ctx
-                            .parent_value
-                            .as_value()
-                            .and_then(|parent| extract_nested(parent, &name));
-                        match value {
-                            Some(val) => Ok(Some(FieldValue::value(val))),
-                            None => Ok(None),
-                        }
-                    })
-                },
-            ))
-            .field(Field::new(
-                "cursor",
-                TypeRef::named_nn("String"),
-                move |ctx| {
-                    let name = "cursor".to_string();
-                    FieldFuture::new(async move {
-                        let value = ctx
-                            .parent_value
-                            .as_value()
-                            .and_then(|parent| extract_nested(parent, &name));
-                        match value {
-                            Some(val) => Ok(Some(FieldValue::value(val))),
-                            None => Ok(None),
-                        }
-                    })
-                },
-            ));
-        builder = builder.register(edge_obj);
 
         let conn_name = format!("{}Connection", type_name);
         let conn_obj = Object::new(conn_name.clone())
             .field(Field::new(
                 "edges",
-                TypeRef::named_nn_list(edge_name),
+                TypeRef::named_nn_list(type_name.clone()),
                 move |ctx| {
                     let name = "edges".to_string();
                     FieldFuture::new(async move {

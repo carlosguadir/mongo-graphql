@@ -66,17 +66,30 @@ pub fn bson_to_json(bson: &Bson) -> serde_json::Value {
 }
 
 /// Map GraphQL input field names back to MongoDB field names.
+/// Relation fields with hex string values are converted to ObjectId.
 /// Fields without an explicit `graphql_name` are returned unchanged.
+/// TODO this function look unnecessary, let's review
 pub fn input_doc_to_mongo(doc: mongodb::bson::Document, coll_def: &CollectionDef) -> mongodb::bson::Document {
     let mut mapped = mongodb::bson::Document::new();
     for (key, value) in doc {
-        let mongo_name = coll_def
+        let field_def = coll_def
             .fields
             .iter()
-            .find(|f| f.graphql_name() == key)
+            .find(|f| f.graphql_name() == key);
+        let mongo_name = field_def
             .map(|f| f.name.clone())
-            .unwrap_or(key);
-        mapped.insert(mongo_name, value);
+            .unwrap_or_else(|| key.clone());
+
+        let mapped_value = match field_def {
+            Some(f) if matches!(f.field_type, FieldType::Relation(_)) => match value {
+                mongodb::bson::Bson::String(ref hex) => mongodb::bson::oid::ObjectId::parse_str(hex)
+                    .map(mongodb::bson::Bson::ObjectId)
+                    .unwrap_or(value),
+                _ => value,
+            },
+            _ => value,
+        };
+        mapped.insert(mongo_name, mapped_value);
     }
     mapped
 }

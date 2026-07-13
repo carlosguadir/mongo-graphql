@@ -1,6 +1,6 @@
 use crate::error::GraphQLError;
 use crate::schema::definition::{FieldType, RelationKind, SchemaDefinition};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub struct SchemaParser;
 
@@ -16,6 +16,7 @@ impl SchemaParser {
         Self::validate_fields(&schema)?;
         Self::validate_enum_names(&schema)?;
         Self::validate_many_to_many(&schema)?;
+        Self::validate_relation_fields(&schema)?;
 
         Ok(schema)
     }
@@ -209,6 +210,81 @@ impl SchemaParser {
                     ),
                     location: format!("junction: {}", junction),
                 });
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_relation_fields(schema: &SchemaDefinition) -> Result<(), GraphQLError> {
+        for coll in &schema.collections {
+            for field in &coll.fields {
+                let rel = match &field.field_type {
+                    FieldType::Relation(rel) => rel,
+                    _ => continue,
+                };
+
+                let target = match schema.collection_by_name(&rel.collection) {
+                    Some(c) => c,
+                    None => continue, // already caught by validate_referenced_collections
+                };
+
+                let mut target_field_names: HashSet<&str> = target
+                    .fields
+                    .iter()
+                    .map(|f| f.name.as_str())
+                    .collect();
+                for f in &target.fields {
+                    if let Some(gql) = &f.graphql_name {
+                        target_field_names.insert(gql.as_str());
+                    }
+                }
+
+                if !target_field_names.contains(rel.reference_field.as_str()) {
+                    return Err(GraphQLError::SchemaParse {
+                        message: format!(
+                            "reference_field '{}' not found in collection '{}' (relation from {}.{})",
+                            rel.reference_field, rel.collection, coll.collection, field.name
+                        ),
+                        location: format!(
+                            "$.collections.{}.fields.{}",
+                            coll.collection, field.name
+                        ),
+                    });
+                }
+
+                if let Some(junction) = &rel.junction {
+                    let jct_coll = match schema.collection_by_name(&junction.collection) {
+                        Some(c) => c,
+                        None => continue,
+                    };
+
+                    let mut jct_field_names: HashSet<&str> = jct_coll
+                        .fields
+                        .iter()
+                        .map(|f| f.name.as_str())
+                        .collect();
+                    for f in &jct_coll.fields {
+                        if let Some(gql) = &f.graphql_name {
+                            jct_field_names.insert(gql.as_str());
+                        }
+                    }
+
+                    for jct_field in [&junction.local_field, &junction.foreign_field] {
+                        if !jct_field_names.contains(jct_field.as_str()) {
+                            return Err(GraphQLError::SchemaParse {
+                                message: format!(
+                                    "junction field '{}' not found in '{}' (relation from {}.{})",
+                                    jct_field, junction.collection, coll.collection, field.name
+                                ),
+                                location: format!(
+                                    "$.collections.{}.fields.{}",
+                                    coll.collection, field.name
+                                ),
+                            });
+                        }
+                    }
+                }
             }
         }
 
