@@ -64,9 +64,11 @@ async fn build_schema() -> Result<async_graphql::dynamic::Schema, Error> {
     let client = Client::with_uri_str(&mongo_uri).await?;
     let db = client.database(&database_name);
 
-    let config = RuntimeConfig { max_page_size };
+    let config = RuntimeConfig {
+        max_page_size,
+    };
     let schema = SchemaBuilder::new(&config, &definition)
-        .build(db)
+        .build(client, db)
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
 
