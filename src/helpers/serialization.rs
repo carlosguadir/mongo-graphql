@@ -81,12 +81,12 @@ pub fn input_doc_to_mongo(doc: mongodb::bson::Document, coll_def: &CollectionDef
             .unwrap_or_else(|| key.clone());
 
         let mapped_value = match field_def {
-            Some(f) if matches!(f.field_type, FieldType::Relation(_)) => match value {
-                mongodb::bson::Bson::String(ref hex) => mongodb::bson::oid::ObjectId::parse_str(hex)
-                    .map(mongodb::bson::Bson::ObjectId)
-                    .unwrap_or(value),
-                _ => value,
-            },
+            Some(f) if matches!(f.field_type, FieldType::Relation(_)) => {
+                // Relation fields are extracted and processed by the mutation resolver
+                // (process_nested_one_input / process_nested_many_input).
+                // They no longer arrive here as plain hex strings.
+                continue;
+            }
             _ => value,
         };
         mapped.insert(mongo_name, mapped_value);

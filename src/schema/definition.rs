@@ -168,7 +168,7 @@ pub struct RelationFieldDef {
     pub junction: Option<JunctionDef>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RelationKind {
     /// FK on this collection. e.g. hero.team_id → team.
