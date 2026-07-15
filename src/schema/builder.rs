@@ -143,14 +143,14 @@ impl<'a> SchemaBuilder<'a> {
         for (_, target_coll_name, _) in &reverse_to_many {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
                 (builder, _) = self.register_reverse_inputs(
-                    builder, collection, target_def, RelationKind::OneToMany,
+                    builder, collection, target_def, RelationKind::OneToMany, "Create",
                 );
             }
         }
         for (_, target_coll_name) in &reverse_to_one {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
                 (builder, _) = self.register_reverse_inputs(
-                    builder, collection, target_def, RelationKind::OneToOne,
+                    builder, collection, target_def, RelationKind::OneToOne, "Create",
                 );
             }
         }
@@ -158,13 +158,13 @@ impl<'a> SchemaBuilder<'a> {
         // ── CreateInput ──
         let mut create_input = InputObject::new(format!("{}CreateInput", type_name));
         create_input = self.build_input_fields(create_input, collection, &collection_map, "Create");
-        create_input = self.add_reverse_fields_to_input(create_input, &reverse_to_many, &reverse_to_one, &collection_map, "Create");
+        create_input = self.add_reverse_fields_to_input(create_input, &reverse_to_many, &reverse_to_one, &collection_map, &type_name, "Create");
         builder = builder.register(create_input);
 
         // ── UpdateInput ──
         let mut update_input = InputObject::new(format!("{}UpdateInput", type_name));
         update_input = self.build_input_fields(update_input, collection, &collection_map, "Update");
-        update_input = self.add_reverse_fields_to_input(update_input, &reverse_to_many, &reverse_to_one, &collection_map, "Update");
+        update_input = self.add_reverse_fields_to_input(update_input, &reverse_to_many, &reverse_to_one, &collection_map, &type_name, "Update");
         builder = builder.register(update_input);
 
         // ── WhereInput ──
@@ -396,7 +396,7 @@ impl<'a> SchemaBuilder<'a> {
                     .get(rel.collection.as_str())
                     .map(|c| c.type_name())
                     .unwrap_or_else(|| rel.collection.clone());
-                let input_name = Self::relation_nested_input_name(rel.kind, &target_type, mutation);
+                let input_name = Self::relation_nested_input_name(rel.kind, &target_type, &collection.type_name(), mutation);
                 input = input.field(InputValue::new(field.graphql_name(), TypeRef::named(&input_name)));
                 continue;
             }
@@ -418,12 +418,13 @@ impl<'a> SchemaBuilder<'a> {
         reverse_to_many: &[(String, String, String)],
         reverse_to_one: &[(String, String)],
         collection_map: &HashMap<&str, &CollectionDef>,
+        source_type: &str,
         mutation: &str,
     ) -> InputObject {
         for (reverse_name, target_coll_name, _) in reverse_to_many {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
                 let input_name = Self::relation_nested_input_name(
-                    RelationKind::ManyToMany, &target_def.type_name(), mutation,
+                    RelationKind::ManyToMany, &target_def.type_name(), source_type, mutation,
                 );
                 input = input.field(InputValue::new(reverse_name.clone(), TypeRef::named(&input_name)));
             }
@@ -431,7 +432,7 @@ impl<'a> SchemaBuilder<'a> {
         for (reverse_name, target_coll_name) in reverse_to_one {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
                 let input_name = Self::relation_nested_input_name(
-                    RelationKind::OneToOne, &target_def.type_name(), mutation,
+                    RelationKind::OneToOne, &target_def.type_name(), source_type, mutation,
                 );
                 input = input.field(InputValue::new(reverse_name.clone(), TypeRef::named(&input_name)));
             }
@@ -439,14 +440,15 @@ impl<'a> SchemaBuilder<'a> {
         input
     }
 
-    /// Build the scalar fields for a `CreateWithout` input.
-    /// Skips id/_id and relations pointing back to `source_coll`.
-    /// Forward relations to other collections are kept as nested inputs.
-    fn build_create_without_fields(
+    /// Build the scalar + forward relation fields for a `CreateWithout` or
+    /// `UpdateWithout` input. Skips id/_id and relations pointing back to
+    /// `source_coll`. For `mutation == "Create"`, required scalars are NN.
+    fn build_without_fields(
         &self,
         mut without_input: InputObject,
         target_coll: &CollectionDef,
         source_coll: &CollectionDef,
+        mutation: &str,
     ) -> InputObject {
         let collection_map: HashMap<&str, &CollectionDef> = self
             .definition
@@ -467,13 +469,15 @@ impl<'a> SchemaBuilder<'a> {
                     .get(rel.collection.as_str())
                     .map(|c| c.type_name())
                     .unwrap_or_else(|| rel.collection.clone());
-                let input_name = Self::relation_nested_input_name(rel.kind, &target_type, "Create");
+                let input_name = Self::relation_nested_input_name(
+                    rel.kind, &target_type, &target_coll.type_name(), mutation,
+                );
                 without_input =
                     without_input.field(InputValue::new(field.graphql_name(), TypeRef::named(&input_name)));
                 continue;
             }
             let field_type = scalars::type_ref(&field.field_type);
-            let input_type = if field.required {
+            let input_type = if field.required && mutation == "Create" {
                 TypeRef::named_nn(field_type.type_name())
             } else {
                 field_type
@@ -503,42 +507,59 @@ impl<'a> SchemaBuilder<'a> {
         let target_type = target_def.type_name();
         let source_type = source_coll.type_name();
 
-        let without_name = format!("{}CreateWithout{}Input", target_type, source_type);
-        if !self.registered_nested_inputs.contains(&without_name) {
-            let base = self.build_create_without_fields(
-                InputObject::new(&without_name), target_def, source_coll,
+        let create_without = format!("{}CreateWithout{}Input", target_type, source_type);
+        if !self.registered_nested_inputs.contains(&create_without) {
+            let base = self.build_without_fields(
+                InputObject::new(&create_without), target_def, source_coll, "Create",
             );
             let with_reverse;
             (builder, with_reverse) = self.add_reverse_fields_to_without(
-                builder, base, target_def, source_coll,
+                builder, base, target_def, source_coll, "Create",
             );
             builder = builder.register(with_reverse);
-            self.registered_nested_inputs.insert(without_name.clone());
+            self.registered_nested_inputs.insert(create_without.clone());
+        }
+
+        let update_without = format!("{}UpdateWithout{}Input", target_type, source_type);
+        if !self.registered_nested_inputs.contains(&update_without) {
+            let base = self.build_without_fields(
+                InputObject::new(&update_without), target_def, source_coll, "Update",
+            );
+            let with_reverse;
+            (builder, with_reverse) = self.add_reverse_fields_to_without(
+                builder, base, target_def, source_coll, "Update",
+            );
+            builder = builder.register(with_reverse);
+            self.registered_nested_inputs.insert(update_without.clone());
         }
 
         let is_to_many = matches!(rel.kind, RelationKind::ManyToMany);
-        builder = self.register_one_or_many_inputs(builder, &target_type, &without_name, is_to_many);
+        builder = self.register_one_or_many_inputs(
+            builder, &target_type, &source_type, &create_without, &update_without, is_to_many,
+        );
 
         builder
     }
 
-    /// Register Create{One/Many}Input and Update{One/Many}Input.
-    /// `is_to_many`: true → CreateMany/UpdateMany, false → CreateOne/UpdateOne.
+    /// Register CreateNested{One/Many}Without{Source}Input and
+    /// Update{One/Many}Without{Source}NestedInput.
     fn register_one_or_many_inputs(
         &mut self,
         mut builder: AgSchemaBuilder,
         target_type: &str,
-        without_name: &str,
+        source_type: &str,
+        create_without_name: &str,
+        update_without_name: &str,
         is_to_many: bool,
     ) -> AgSchemaBuilder {
         let where_unique = format!("{}WhereUniqueInput", target_type);
         let (card, create_ref, connect_ref, disc_del_ref) = if is_to_many {
-            ("Many", TypeRef::named_nn_list(without_name), TypeRef::named_nn_list(&where_unique), TypeRef::named_nn_list(&where_unique))
+            ("Many", TypeRef::named_nn_list(create_without_name), TypeRef::named_nn_list(&where_unique), TypeRef::named_nn_list(&where_unique))
         } else {
-            ("One", TypeRef::named(without_name), TypeRef::named(&where_unique), TypeRef::named("Boolean"))
+            ("One", TypeRef::named(create_without_name), TypeRef::named(&where_unique), TypeRef::named("Boolean"))
         };
 
-        let create_name = format!("{}NestedCreate{}Input", target_type, card);
+        let create_name = format!("{}CreateNested{}Without{}Input", target_type, card, source_type);
         if !self.registered_nested_inputs.contains(&create_name) {
             let input = InputObject::new(&create_name)
                 .field(InputValue::new("create", create_ref.clone()))
@@ -547,13 +568,29 @@ impl<'a> SchemaBuilder<'a> {
             self.registered_nested_inputs.insert(create_name);
         }
 
-        let update_name = format!("{}NestedUpdate{}Input", target_type, card);
+        // Build update field ref: to-one is nullable named, to-many needs WithWhere wrapper
+        let update_ref = if is_to_many {
+            let with_where_name = format!("{}UpdateWithWhereUniqueWithout{}Input", target_type, source_type);
+            if !self.registered_nested_inputs.contains(&with_where_name) {
+                let with_where = InputObject::new(&with_where_name)
+                    .field(InputValue::new("where", TypeRef::named_nn(&where_unique)))
+                    .field(InputValue::new("data", TypeRef::named_nn(update_without_name)));
+                builder = builder.register(with_where);
+                self.registered_nested_inputs.insert(with_where_name.clone());
+            }
+            TypeRef::named_nn_list(&with_where_name)
+        } else {
+            TypeRef::named(update_without_name)
+        };
+
+        let update_name = format!("{}Update{}Without{}NestedInput", target_type, card, source_type);
         if !self.registered_nested_inputs.contains(&update_name) {
             let input = InputObject::new(&update_name)
                 .field(InputValue::new("create", create_ref))
                 .field(InputValue::new("connect", connect_ref))
                 .field(InputValue::new("disconnect", disc_del_ref.clone()))
-                .field(InputValue::new("delete", disc_del_ref));
+                .field(InputValue::new("delete", disc_del_ref))
+                .field(InputValue::new("update", update_ref));
             builder = builder.register(input);
             self.registered_nested_inputs.insert(update_name);
         }
@@ -569,43 +606,62 @@ impl<'a> SchemaBuilder<'a> {
         source_coll: &CollectionDef,
         target_coll: &CollectionDef,
         kind: RelationKind,
+        _mutation: &str,
     ) -> (AgSchemaBuilder, String) {
         let target_type = target_coll.type_name();
         let source_type = source_coll.type_name();
         let is_to_many = matches!(kind, RelationKind::OneToMany);
 
-        let without_name = format!("{}CreateWithout{}Input", target_type, source_type);
-        if !self.registered_nested_inputs.contains(&without_name) {
-            let base = self.build_create_without_fields(
-                InputObject::new(&without_name), target_coll, source_coll,
+        // Build CreateWithout
+        let create_without = format!("{}CreateWithout{}Input", target_type, source_type);
+        if !self.registered_nested_inputs.contains(&create_without) {
+            let base = self.build_without_fields(
+                InputObject::new(&create_without), target_coll, source_coll, "Create",
             );
             let with_reverse;
             (builder, with_reverse) = self.add_reverse_fields_to_without(
-                builder, base, target_coll, source_coll,
+                builder, base, target_coll, source_coll, "Create",
             );
             builder = builder.register(with_reverse);
-            self.registered_nested_inputs.insert(without_name.clone());
+            self.registered_nested_inputs.insert(create_without.clone());
         }
 
-        builder = self.register_one_or_many_inputs(builder, &target_type, &without_name, is_to_many);
+        // Build UpdateWithout
+        let update_without = format!("{}UpdateWithout{}Input", target_type, source_type);
+        if !self.registered_nested_inputs.contains(&update_without) {
+            let base = self.build_without_fields(
+                InputObject::new(&update_without), target_coll, source_coll, "Update",
+            );
+            let with_reverse;
+            (builder, with_reverse) = self.add_reverse_fields_to_without(
+                builder, base, target_coll, source_coll, "Update",
+            );
+            builder = builder.register(with_reverse);
+            self.registered_nested_inputs.insert(update_without.clone());
+        }
 
-        let create_name = if is_to_many {
-            format!("{}NestedCreateManyInput", target_type)
+        builder = self.register_one_or_many_inputs(
+            builder, &target_type, &source_type, &create_without, &update_without, is_to_many,
+        );
+
+        let nested_name = if is_to_many {
+            format!("{}CreateNestedManyWithout{}Input", target_type, source_type)
         } else {
-            format!("{}NestedCreateOneInput", target_type)
+            format!("{}CreateNestedOneWithout{}Input", target_type, source_type)
         };
 
-        (builder, create_name)
+        (builder, nested_name)
     }
 
-    /// Add reverse fields (OneToMany and OneToOne) to a `CreateWithout` input
-    /// for 3-level nesting support.
+    /// Add reverse fields (OneToMany and OneToOne) to a CreateWithout or
+    /// UpdateWithout input for 3-level nesting support.
     fn add_reverse_fields_to_without(
         &mut self,
         mut builder: AgSchemaBuilder,
         mut without_input: InputObject,
         target_coll: &CollectionDef,
         source_coll: &CollectionDef,
+        mutation: &str,
     ) -> (AgSchemaBuilder, InputObject) {
         for other_coll in &self.definition.collections {
             if other_coll.collection == target_coll.collection {
@@ -632,22 +688,26 @@ impl<'a> SchemaBuilder<'a> {
                     ),
                     _ => continue,
                 };
-                let create_type_name;
-                (builder, create_type_name) = self.register_reverse_inputs(
-                    builder, target_coll, other_coll, kind,
+                let type_name;
+                (builder, type_name) = self.register_reverse_inputs(
+                    builder, target_coll, other_coll, kind, mutation,
                 );
                 without_input = without_input.field(InputValue::new(
                     reverse_name,
-                    TypeRef::named(&create_type_name),
+                    TypeRef::named(&type_name),
                 ));
             }
         }
         (builder, without_input)
     }
 
-    fn relation_nested_input_name(kind: RelationKind, target_type: &str, mutation: &str) -> String {
+    fn relation_nested_input_name(kind: RelationKind, target_type: &str, source_type: &str, mutation: &str) -> String {
         let cardinality = if matches!(kind, RelationKind::ManyToMany) { "Many" } else { "One" };
-        format!("{}Nested{}{}Input", target_type, mutation, cardinality)
+        match mutation {
+            "Create" => format!("{}CreateNested{}Without{}Input", target_type, cardinality, source_type),
+            "Update" => format!("{}Update{}Without{}NestedInput", target_type, cardinality, source_type),
+            _ => panic!("unknown mutation: {}", mutation),
+        }
     }
 
     // ── Enum & filter registration ──
