@@ -591,7 +591,7 @@ mod tests {
                     r#"mutation {{
                         updateTeam(
                             where: {{ id: "{}" }},
-                            input: {{ members: {{ disconnect: ["{}"] }} }}
+                            input: {{ members: {{ disconnect: [{{ id: "{}" }}] }} }}
                         ) {{ id }}
                     }}"#,
                     team_oid.to_hex(),
@@ -658,7 +658,7 @@ mod tests {
                     r#"mutation {{
                         updateTeam(
                             where: {{ id: "{}" }},
-                            input: {{ members: {{ delete: ["{}"] }} }}
+                            input: {{ members: {{ delete: [{{ id: "{}" }}] }} }}
                         ) {{ id }}
                     }}"#,
                     team_oid.to_hex(),

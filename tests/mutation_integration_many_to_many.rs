@@ -174,7 +174,7 @@ mod tests {
                 r#"mutation {{
                     updateHero(
                         where: {{ id: "{}" }},
-                        input: {{ missions: {{ disconnect: ["{}"] }} }}
+                        input: {{ missions: {{ disconnect: [{{ id: "{}" }}] }} }}
                     ) {{ id }}
                 }}"#,
                 disconnect_hero_oid.to_hex(),
@@ -261,7 +261,7 @@ mod tests {
                 r#"mutation {{
                     updateHero(
                         where: {{ id: "{}" }},
-                        input: {{ missions: {{ delete: ["{}"] }} }}
+                        input: {{ missions: {{ delete: [{{ id: "{}" }}] }} }}
                     ) {{ id }}
                 }}"#,
                 delete_hero_oid.to_hex(),
@@ -460,7 +460,7 @@ mod tests {
                 r#"mutation {{
                     updateMission(
                         where: {{ id: "{}" }},
-                        input: {{ heroes: {{ disconnect: ["{}"] }} }}
+                        input: {{ heroes: {{ disconnect: [{{ id: "{}" }}] }} }}
                     ) {{ id }}
                 }}"#,
                 rev_disconnect_mission_oid.to_hex(),
@@ -547,7 +547,7 @@ mod tests {
                 r#"mutation {{
                     updateMission(
                         where: {{ id: "{}" }},
-                        input: {{ heroes: {{ delete: ["{}"] }} }}
+                        input: {{ heroes: {{ delete: [{{ id: "{}" }}] }} }}
                     ) {{ id }}
                 }}"#,
                 rev_delete_mission_oid.to_hex(),

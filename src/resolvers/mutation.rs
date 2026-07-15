@@ -425,7 +425,7 @@ async fn process_nested_many_input(
     let target_coll = db.collection::<Document>(&target_coll_def.collection);
 
     if let Some(ids) = nested.get("connect").and_then(|v| v.as_array()) {
-        for oid in &parse_id_array(ids, IdFormat::Object)? {
+        for oid in &parse_id_array(ids)? {
             target_coll
                 .update_one(
                     doc! { "_id": oid },
@@ -453,7 +453,7 @@ async fn process_nested_many_input(
     }
 
     if let Some(ids) = nested.get("disconnect").and_then(|v| v.as_array()) {
-        for oid in &parse_id_array(ids, IdFormat::Scalar)? {
+        for oid in &parse_id_array(ids)? {
             target_coll
                 .update_one(
                     doc! { "_id": oid, fk_field: source_oid },
@@ -467,7 +467,7 @@ async fn process_nested_many_input(
     }
 
     if let Some(ids) = nested.get("delete").and_then(|v| v.as_array()) {
-        for oid in &parse_id_array(ids, IdFormat::Scalar)? {
+        for oid in &parse_id_array(ids)? {
             target_coll
                 .delete_one(doc! { "_id": oid, fk_field: source_oid })
                 .session(&mut *session)
@@ -496,7 +496,7 @@ async fn process_nested_many_to_many_input(
     let junction_coll = db.collection::<Document>(&junction.collection);
 
     if let Some(ids) = nested.get("connect").and_then(|v| v.as_array()) {
-        for oid in &parse_id_array(ids, IdFormat::Object)? {
+        for oid in &parse_id_array(ids)? {
             junction_coll
                 .insert_one(&doc! {
                     &junction.local_field: source_oid,
@@ -532,7 +532,7 @@ async fn process_nested_many_to_many_input(
     }
 
     if let Some(ids) = nested.get("disconnect").and_then(|v| v.as_array()) {
-        for oid in &parse_id_array(ids, IdFormat::Scalar)? {
+        for oid in &parse_id_array(ids)? {
             junction_coll
                 .delete_one(doc! {
                     &junction.local_field: source_oid,
@@ -547,7 +547,7 @@ async fn process_nested_many_to_many_input(
 
     if let Some(ids) = nested.get("delete").and_then(|v| v.as_array()) {
         let target_coll = db.collection::<Document>(&target_coll_def.collection);
-        for oid in &parse_id_array(ids, IdFormat::Scalar)? {
+        for oid in &parse_id_array(ids)? {
             junction_coll
                 .delete_one(doc! {
                     &junction.local_field: source_oid,
@@ -708,38 +708,21 @@ fn build_current_fk_map(
         .collect()
 }
 
-enum IdFormat {
-    Object,
-    Scalar,
-}
-
 fn parse_id_array(
     arr: &mongodb::bson::Array,
-    format: IdFormat,
 ) -> Result<Vec<ObjectId>, GraphQLError> {
     arr.iter()
-        .map(|entry| match format {
-            IdFormat::Object => {
-                let doc = entry.as_document().ok_or_else(|| {
-                    GraphQLError::Internal(
-                        "Each connect entry must be an object with an id field".into(),
-                    )
-                })?;
-                let hex = doc.get_str("id").map_err(|_| {
-                    GraphQLError::Internal("Each connect entry must have an 'id' field".into())
-                })?;
-                ObjectId::parse_str(hex)
-                    .map_err(|_| GraphQLError::Internal("Invalid ObjectId in connect".into()))
-            }
-            IdFormat::Scalar => {
-                let hex = entry.as_str().ok_or_else(|| {
-                    GraphQLError::Internal(
-                        "Each disconnect/delete entry must be an ID string".into(),
-                    )
-                })?;
-                ObjectId::parse_str(hex)
-                    .map_err(|_| GraphQLError::Internal("Invalid ObjectId in array".into()))
-            }
+        .map(|entry| {
+            let doc = entry.as_document().ok_or_else(|| {
+                GraphQLError::Internal(
+                    "Each entry must be an object with an id field".into(),
+                )
+            })?;
+            let hex = doc.get_str("id").map_err(|_| {
+                GraphQLError::Internal("Each entry must have an 'id' field".into())
+            })?;
+            ObjectId::parse_str(hex)
+                .map_err(|_| GraphQLError::Internal("Invalid ObjectId in entry".into()))
         })
         .collect()
 }

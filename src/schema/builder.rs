@@ -531,13 +531,14 @@ impl<'a> SchemaBuilder<'a> {
         without_name: &str,
         is_to_many: bool,
     ) -> AgSchemaBuilder {
+        let where_unique = format!("{}WhereUniqueInput", target_type);
         let (card, create_ref, connect_ref, disc_del_ref) = if is_to_many {
-            ("Many", TypeRef::named_nn_list(without_name), TypeRef::named_nn_list(format!("{}WhereUniqueInput", target_type)), TypeRef::named_nn_list("ID"))
+            ("Many", TypeRef::named_nn_list(without_name), TypeRef::named_nn_list(&where_unique), TypeRef::named_nn_list(&where_unique))
         } else {
-            ("One", TypeRef::named(without_name), TypeRef::named(format!("{}WhereUniqueInput", target_type)), TypeRef::named("Boolean"))
+            ("One", TypeRef::named(without_name), TypeRef::named(&where_unique), TypeRef::named("Boolean"))
         };
 
-        let create_name = format!("{}Create{}Input", target_type, card);
+        let create_name = format!("{}NestedCreate{}Input", target_type, card);
         if !self.registered_nested_inputs.contains(&create_name) {
             let input = InputObject::new(&create_name)
                 .field(InputValue::new("create", create_ref.clone()))
@@ -546,7 +547,7 @@ impl<'a> SchemaBuilder<'a> {
             self.registered_nested_inputs.insert(create_name);
         }
 
-        let update_name = format!("{}Update{}Input", target_type, card);
+        let update_name = format!("{}NestedUpdate{}Input", target_type, card);
         if !self.registered_nested_inputs.contains(&update_name) {
             let input = InputObject::new(&update_name)
                 .field(InputValue::new("create", create_ref))
@@ -589,9 +590,9 @@ impl<'a> SchemaBuilder<'a> {
         builder = self.register_one_or_many_inputs(builder, &target_type, &without_name, is_to_many);
 
         let create_name = if is_to_many {
-            format!("{}CreateManyInput", target_type)
+            format!("{}NestedCreateManyInput", target_type)
         } else {
-            format!("{}CreateOneInput", target_type)
+            format!("{}NestedCreateOneInput", target_type)
         };
 
         (builder, create_name)
@@ -615,12 +616,9 @@ impl<'a> SchemaBuilder<'a> {
                     FieldType::Relation(r) if r.collection == target_coll.collection => r,
                     _ => continue,
                 };
-                // Skip OneToOne reverse fields pointing back to the source —
-                // allowing them would let two documents share the same FK,
-                // violating the uniqueness constraint.
-                if other_coll.collection == source_coll.collection
-                    && matches!(rel.kind, RelationKind::OneToOne)
-                {
+                // Skip reverse fields originating from the source collection —
+                // they would create a circular type reference back to source.
+                if other_coll.collection == source_coll.collection {
                     continue;
                 }
                 let (reverse_name, kind) = match rel.kind {
@@ -649,7 +647,7 @@ impl<'a> SchemaBuilder<'a> {
 
     fn relation_nested_input_name(kind: RelationKind, target_type: &str, mutation: &str) -> String {
         let cardinality = if matches!(kind, RelationKind::ManyToMany) { "Many" } else { "One" };
-        format!("{}{}{}Input", target_type, mutation, cardinality)
+        format!("{}Nested{}{}Input", target_type, mutation, cardinality)
     }
 
     // ── Enum & filter registration ──
