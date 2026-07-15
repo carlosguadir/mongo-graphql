@@ -494,7 +494,7 @@ impl<'a> SchemaBuilder<'a> {
             );
             let with_reverse;
             (builder, with_reverse) = self.add_reverse_fields_to_without(
-                builder, base, target_def,
+                builder, base, target_def, source_coll,
             );
             builder = builder.register(with_reverse);
             self.registered_nested_inputs.insert(without_name.clone());
@@ -564,7 +564,7 @@ impl<'a> SchemaBuilder<'a> {
             );
             let with_reverse;
             (builder, with_reverse) = self.add_reverse_fields_to_without(
-                builder, base, target_coll,
+                builder, base, target_coll, source_coll,
             );
             builder = builder.register(with_reverse);
             self.registered_nested_inputs.insert(without_name.clone());
@@ -588,6 +588,7 @@ impl<'a> SchemaBuilder<'a> {
         mut builder: AgSchemaBuilder,
         mut without_input: InputObject,
         target_coll: &CollectionDef,
+        source_coll: &CollectionDef,
     ) -> (AgSchemaBuilder, InputObject) {
         for other_coll in &self.definition.collections {
             if other_coll.collection == target_coll.collection {
@@ -598,6 +599,14 @@ impl<'a> SchemaBuilder<'a> {
                     FieldType::Relation(r) if r.collection == target_coll.collection => r,
                     _ => continue,
                 };
+                // Skip OneToOne reverse fields pointing back to the source —
+                // allowing them would let two documents share the same FK,
+                // violating the uniqueness constraint.
+                if other_coll.collection == source_coll.collection
+                    && matches!(rel.kind, RelationKind::OneToOne)
+                {
+                    continue;
+                }
                 let (reverse_name, kind) = match rel.kind {
                     RelationKind::OneToMany => (
                         rel.reverse_name.clone().unwrap_or_else(|| other_coll.plural_name()),
