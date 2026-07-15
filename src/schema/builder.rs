@@ -39,7 +39,7 @@ impl<'a> SchemaBuilder<'a> {
         ping_cmd.insert("ping", 1);
         db.run_command(ping_cmd)
             .await
-            .map_err(|e| GraphQLError::Database(format!("Database ping failed: {}", e)))?;
+            .map_err(|err| GraphQLError::Database(format!("Database ping failed: {}", err)))?;
 
         let mut builder = Schema::build("Query", Some("Mutation"), None);
         builder = scalars::register_all(builder);
@@ -71,7 +71,7 @@ impl<'a> SchemaBuilder<'a> {
             .data(self.config.clone())
             .data(self.definition.clone())
             .finish()
-            .map_err(|e| GraphQLError::SchemaBuild(format!("Failed to build schema: {}", e)))?;
+            .map_err(|err| GraphQLError::SchemaBuild(format!("Failed to build schema: {}", err)))?;
 
         Ok(schema)
     }
@@ -97,14 +97,13 @@ impl<'a> SchemaBuilder<'a> {
             .definition
             .collections
             .iter()
-            .map(|c| (c.collection.as_str(), c))
+            .map(|collection| (collection.collection.as_str(), collection))
             .collect();
 
         // Collect reverse relations: other collections with OneToMany or OneToOne
         // pointing to THIS collection get a reverse field on this collection's inputs.
         let (reverse_to_many, reverse_to_one) = self.collect_reverse_relations(collection);
 
-        // ── Object type ──
         let mut obj = Object::new(type_name.clone());
         for field in &collection.fields {
             if matches!(field.field_type, FieldType::Relation(_)) {
@@ -130,16 +129,130 @@ impl<'a> SchemaBuilder<'a> {
                 },
             ));
         }
+
+        for field in &collection.fields {
+            let relation = match &field.field_type {
+                FieldType::Relation(relation) => relation,
+                _ => continue,
+            };
+            let target_def = match collection_map.get(relation.collection.as_str()) {
+                Some(collection_def) => (*collection_def).clone(),
+                None => continue,
+            };
+            let target_type = target_def.type_name();
+            let db_for_rel = db.clone();
+
+            match relation.kind {
+                RelationKind::OneToMany | RelationKind::OneToOne => {
+                    let target_coll_name = relation.collection.clone();
+                    let fk_mongo_name = field.name.clone();
+                    let target_def_for_closure = target_def.clone();
+                    obj = obj.field(Field::new(
+                        field.graphql_name(),
+                        TypeRef::named(target_type),
+                        move |ctx| {
+                            let db = db_for_rel.clone();
+                            let target_coll = target_coll_name.clone();
+                            let target_def = target_def_for_closure.clone();
+                            let fk_name = fk_mongo_name.clone();
+                            FieldFuture::new(async move {
+                                let result = crate::resolvers::query_relation::resolve_forward_to_one(
+                                    &ctx, &db, &target_coll, &target_def, &fk_name,
+                                )
+                                .await;
+                                resolve_to_field_value(result)
+                            })
+                        },
+                    ));
+                }
+                RelationKind::ManyToMany => {
+                    let junction = match &relation.junction {
+                        Some(junction_def) => junction_def.clone(),
+                        None => continue,
+                    };
+                    let target_def_for_closure = target_def.clone();
+                    obj = obj.field(Field::new(
+                        field.graphql_name(),
+                        TypeRef::named_nn_list(&target_type),
+                        move |ctx| {
+                            let db = db_for_rel.clone();
+                            let junction = junction.clone();
+                            let target_def = target_def_for_closure.clone();
+                            FieldFuture::new(async move {
+                                let result = crate::resolvers::query_relation::resolve_forward_many_to_many(
+                                    &ctx, &db, &junction, &target_def,
+                                )
+                                .await;
+                                resolve_to_field_value(result)
+                            })
+                        },
+                    ));
+                }
+            }
+        }
+
+        for (reverse_name, target_coll_name, fk_field) in &reverse_to_many {
+            let target_def = match collection_map.get(target_coll_name.as_str()) {
+                Some(collection_def) => (*collection_def).clone(),
+                None => continue,
+            };
+            let target_type = target_def.type_name();
+            let fk_field_for_closure = fk_field.clone();
+            let target_def_for_closure = target_def.clone();
+            let db_for_rel = db.clone();
+            obj = obj.field(Field::new(
+                reverse_name.clone(),
+                TypeRef::named_nn_list(target_type),
+                move |ctx| {
+                    let db = db_for_rel.clone();
+                    let target_def = target_def_for_closure.clone();
+                    let fk_field = fk_field_for_closure.clone();
+                    FieldFuture::new(async move {
+                        let result = crate::resolvers::query_relation::resolve_reverse_to_many(
+                            &ctx, &db, &target_def, &fk_field,
+                        )
+                        .await;
+                        resolve_to_field_value(result)
+                    })
+                },
+            ));
+        }
+
+        for (reverse_name, target_coll_name, fk_field) in &reverse_to_one {
+            let target_def = match collection_map.get(target_coll_name.as_str()) {
+                Some(collection_def) => (*collection_def).clone(),
+                None => continue,
+            };
+            let target_type = target_def.type_name();
+            let fk_field_for_closure = fk_field.clone();
+            let target_def_for_closure = target_def.clone();
+            let db_for_rel = db.clone();
+            obj = obj.field(Field::new(
+                reverse_name.clone(),
+                TypeRef::named(target_type),
+                move |ctx| {
+                    let db = db_for_rel.clone();
+                    let target_def = target_def_for_closure.clone();
+                    let fk_field = fk_field_for_closure.clone();
+                    FieldFuture::new(async move {
+                        let result = crate::resolvers::query_relation::resolve_reverse_to_one(
+                            &ctx, &db, &target_def, &fk_field,
+                        )
+                        .await;
+                        resolve_to_field_value(result)
+                    })
+                },
+            ));
+        }
+
         builder = builder.register(obj);
 
-        // ── Register nested inputs for forward relation fields ──
         for field in &collection.fields {
             if let FieldType::Relation(_rel) = &field.field_type {
                 builder = self.register_nested_inputs_for_field(builder, collection, field);
             }
         }
 
-        // ── Register reverse input types ──
         for (_, target_coll_name, _) in &reverse_to_many {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
                 (builder, _) = self.register_reverse_inputs(
@@ -147,7 +260,7 @@ impl<'a> SchemaBuilder<'a> {
                 );
             }
         }
-        for (_, target_coll_name) in &reverse_to_one {
+        for (_, target_coll_name, _) in &reverse_to_one {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
                 (builder, _) = self.register_reverse_inputs(
                     builder, collection, target_def, RelationKind::OneToOne,
@@ -155,19 +268,16 @@ impl<'a> SchemaBuilder<'a> {
             }
         }
 
-        // ── CreateInput ──
         let mut create_input = InputObject::new(format!("{}CreateInput", type_name));
         create_input = self.build_input_fields(create_input, collection, &collection_map, "Create");
         create_input = self.add_reverse_fields_to_input(create_input, &reverse_to_many, &reverse_to_one, &collection_map, &type_name, "Create");
         builder = builder.register(create_input);
 
-        // ── UpdateInput ──
         let mut update_input = InputObject::new(format!("{}UpdateInput", type_name));
         update_input = self.build_input_fields(update_input, collection, &collection_map, "Update");
         update_input = self.add_reverse_fields_to_input(update_input, &reverse_to_many, &reverse_to_one, &collection_map, &type_name, "Update");
         builder = builder.register(update_input);
 
-        // ── WhereInput ──
         let mut where_input =
             InputObject::new(format!("{}WhereInput", type_name))
                 .field(InputValue::new("id", TypeRef::named("IdFilter")));
@@ -184,7 +294,6 @@ impl<'a> SchemaBuilder<'a> {
         }
         builder = builder.register(where_input);
 
-        // ── SortInput ──
         let mut sort_input = InputObject::new(format!("{}SortInput", type_name));
         for field in &collection.fields {
             if field.name == "id" || field.name == "_id" {
@@ -200,7 +309,6 @@ impl<'a> SchemaBuilder<'a> {
 
         let object_ref = TypeRef::named(type_name.clone());
 
-        // ── Connection type ──
         let conn_name = format!("{}Connection", type_name);
         let conn_obj = Object::new(conn_name.clone())
             .field(nested_field("edges", TypeRef::named_nn_list(type_name.clone())))
@@ -208,7 +316,6 @@ impl<'a> SchemaBuilder<'a> {
             .field(nested_field("totalCount", TypeRef::named_nn("Int")));
         builder = builder.register(conn_obj);
 
-        // ── Query: singular ──
         let coll_for_get = collection.clone();
         let db_for_get = db.clone();
         query_root = query_root.field(
@@ -220,9 +327,9 @@ impl<'a> SchemaBuilder<'a> {
                     (match result {
                         Ok(Some(value)) => json_to_field_value(value).map(Some),
                         Ok(None) => Ok(None),
-                        Err(e) => Err(e),
+                        Err(err) => Err(err),
                     })
-                    .map_err(|e| e.into_graphql_error())
+                    .map_err(|err| err.into_graphql_error())
                 })
             })
             .argument(InputValue::new(
@@ -231,7 +338,6 @@ impl<'a> SchemaBuilder<'a> {
             )),
         );
 
-        // ── Query: plural ──
         let coll_for_list = collection.clone();
         let db_for_list = db.clone();
         let page_size = self.config.max_page_size;
@@ -246,9 +352,9 @@ impl<'a> SchemaBuilder<'a> {
                         let result = query::resolve_list(ctx, &coll_def, &db, page_size).await;
                         (match result {
                             Ok(value) => json_to_field_value(value).map(Some),
-                            Err(e) => Err(e),
+                            Err(err) => Err(err),
                         })
-                        .map_err(|e| e.into_graphql_error())
+                        .map_err(|err| err.into_graphql_error())
                     })
                 },
             )
@@ -260,7 +366,6 @@ impl<'a> SchemaBuilder<'a> {
             .argument(InputValue::new("sort", TypeRef::named(format!("{}SortInput", type_name)))),
         );
 
-        // ── Mutations ──
         let coll_for_create = collection.clone();
         let client_for_create = client.clone();
         let db_for_create = db.clone();
@@ -340,7 +445,7 @@ impl<'a> SchemaBuilder<'a> {
     fn collect_reverse_relations(
         &self,
         collection: &CollectionDef,
-    ) -> (Vec<(String, String, String)>, Vec<(String, String)>) {
+    ) -> (Vec<(String, String, String)>, Vec<(String, String, String)>) {
         let mut to_many = Vec::new();
         let mut to_one = Vec::new();
         for other in &self.definition.collections {
@@ -348,24 +453,24 @@ impl<'a> SchemaBuilder<'a> {
                 continue;
             }
             for field in &other.fields {
-                if let FieldType::Relation(rel) = &field.field_type {
-                    if rel.collection != collection.collection {
+                if let FieldType::Relation(relation) = &field.field_type {
+                    if relation.collection != collection.collection {
                         continue;
                     }
-                    match rel.kind {
+                    match relation.kind {
                         RelationKind::OneToMany => {
-                            let name = rel
+                            let name = relation
                                 .reverse_name
                                 .clone()
                                 .unwrap_or_else(|| other.plural_name());
                             to_many.push((name, other.collection.clone(), field.name.clone()));
                         }
                         RelationKind::OneToOne => {
-                            let name = rel
+                            let name = relation
                                 .reverse_name
                                 .clone()
                                 .unwrap_or_else(|| other.singular_name());
-                            to_one.push((name, other.collection.clone()));
+                            to_one.push((name, other.collection.clone(), field.name.clone()));
                         }
                         _ => {}
                     }
@@ -387,12 +492,12 @@ impl<'a> SchemaBuilder<'a> {
             if field.name == "id" || field.name == "_id" {
                 continue;
             }
-            if let FieldType::Relation(rel) = &field.field_type {
+            if let FieldType::Relation(relation) = &field.field_type {
                 let target_type = collection_map
-                    .get(rel.collection.as_str())
-                    .map(|c| c.type_name())
-                    .unwrap_or_else(|| rel.collection.clone());
-                let input_name = Self::relation_nested_input_name(rel.kind, &target_type, &collection.type_name(), mutation);
+                    .get(relation.collection.as_str())
+                    .map(|collection| collection.type_name())
+                    .unwrap_or_else(|| relation.collection.clone());
+                let input_name = Self::relation_nested_input_name(relation.kind, &target_type, &collection.type_name(), mutation);
                 input = input.field(InputValue::new(field.graphql_name(), TypeRef::named(&input_name)));
                 continue;
             }
@@ -412,7 +517,7 @@ impl<'a> SchemaBuilder<'a> {
         &self,
         mut input: InputObject,
         reverse_to_many: &[(String, String, String)],
-        reverse_to_one: &[(String, String)],
+        reverse_to_one: &[(String, String, String)],
         collection_map: &HashMap<&str, &CollectionDef>,
         source_type: &str,
         mutation: &str,
@@ -425,7 +530,7 @@ impl<'a> SchemaBuilder<'a> {
                 input = input.field(InputValue::new(reverse_name.clone(), TypeRef::named(&input_name)));
             }
         }
-        for (reverse_name, target_coll_name) in reverse_to_one {
+        for (reverse_name, target_coll_name, _) in reverse_to_one {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
                 let input_name = Self::relation_nested_input_name(
                     RelationKind::OneToOne, &target_def.type_name(), source_type, mutation,
@@ -450,17 +555,17 @@ impl<'a> SchemaBuilder<'a> {
             if field.name == "id" || field.name == "_id" {
                 continue;
             }
-            if let FieldType::Relation(rel) = &field.field_type {
-                if rel.collection == source_coll.collection {
+            if let FieldType::Relation(relation) = &field.field_type {
+                if relation.collection == source_coll.collection {
                     continue;
                 }
                 let target_type = self
                     .definition
-                    .collection_by_name(&rel.collection)
-                    .map(|c| c.type_name())
-                    .unwrap_or_else(|| rel.collection.clone());
+                    .collection_by_name(&relation.collection)
+                    .map(|collection| collection.type_name())
+                    .unwrap_or_else(|| relation.collection.clone());
                 let input_name = Self::relation_nested_input_name(
-                    rel.kind, &target_type, &target_coll.type_name(), mutation,
+                    relation.kind, &target_type, &target_coll.type_name(), mutation,
                 );
                 without_input =
                     without_input.field(InputValue::new(field.graphql_name(), TypeRef::named(&input_name)));
@@ -514,12 +619,12 @@ impl<'a> SchemaBuilder<'a> {
         source_coll: &CollectionDef,
         field: &crate::schema::definition::FieldDef,
     ) -> AgSchemaBuilder {
-        let rel = match &field.field_type {
-            FieldType::Relation(r) => r,
+        let relation = match &field.field_type {
+            FieldType::Relation(relation) => relation,
             _ => return builder,
         };
-        let target_def = match self.definition.collection_by_name(&rel.collection) {
-            Some(c) => c,
+        let target_def = match self.definition.collection_by_name(&relation.collection) {
+            Some(collection_def) => collection_def,
             None => return builder,
         };
         let target_type = target_def.type_name();
@@ -530,7 +635,7 @@ impl<'a> SchemaBuilder<'a> {
         let update_without;
         (builder, update_without) = self.ensure_without_type(builder, target_def, source_coll, "Update");
 
-        let is_to_many = matches!(rel.kind, RelationKind::ManyToMany);
+        let is_to_many = matches!(relation.kind, RelationKind::ManyToMany);
         builder = self.register_one_or_many_inputs(
             builder, &target_type, &source_type, &create_without, &update_without, is_to_many,
         );
@@ -550,13 +655,13 @@ impl<'a> SchemaBuilder<'a> {
         is_to_many: bool,
     ) -> AgSchemaBuilder {
         let where_unique = format!("{}WhereUniqueInput", target_type);
-        let (card, create_ref, connect_ref, disc_del_ref) = if is_to_many {
+        let (cardinality, create_ref, connect_ref, disconnect_delete_ref) = if is_to_many {
             ("Many", TypeRef::named_nn_list(create_without_name), TypeRef::named_nn_list(&where_unique), TypeRef::named_nn_list(&where_unique))
         } else {
             ("One", TypeRef::named(create_without_name), TypeRef::named(&where_unique), TypeRef::named("Boolean"))
         };
 
-        let create_name = format!("{}CreateNested{}Without{}Input", target_type, card, source_type);
+        let create_name = format!("{}CreateNested{}Without{}Input", target_type, cardinality, source_type);
         if !self.registered_nested_inputs.contains(&create_name) {
             let input = InputObject::new(&create_name)
                 .field(InputValue::new("create", create_ref.clone()))
@@ -580,13 +685,13 @@ impl<'a> SchemaBuilder<'a> {
             TypeRef::named(update_without_name)
         };
 
-        let update_name = format!("{}Update{}Without{}NestedInput", target_type, card, source_type);
+        let update_name = format!("{}Update{}Without{}NestedInput", target_type, cardinality, source_type);
         if !self.registered_nested_inputs.contains(&update_name) {
             let input = InputObject::new(&update_name)
                 .field(InputValue::new("create", create_ref))
                 .field(InputValue::new("connect", connect_ref))
-                .field(InputValue::new("disconnect", disc_del_ref.clone()))
-                .field(InputValue::new("delete", disc_del_ref))
+                .field(InputValue::new("disconnect", disconnect_delete_ref.clone()))
+                .field(InputValue::new("delete", disconnect_delete_ref))
                 .field(InputValue::new("update", update_ref));
             builder = builder.register(input);
             self.registered_nested_inputs.insert(update_name);
@@ -640,8 +745,8 @@ impl<'a> SchemaBuilder<'a> {
                 continue;
             }
             for other_field in &other_coll.fields {
-                let rel = match &other_field.field_type {
-                    FieldType::Relation(r) if r.collection == target_coll.collection => r,
+                let relation = match &other_field.field_type {
+                    FieldType::Relation(relation) if relation.collection == target_coll.collection => relation,
                     _ => continue,
                 };
                 // Skip reverse fields originating from the source collection —
@@ -649,13 +754,13 @@ impl<'a> SchemaBuilder<'a> {
                 if other_coll.collection == source_coll.collection {
                     continue;
                 }
-                let (reverse_name, kind) = match rel.kind {
+                let (reverse_name, kind) = match relation.kind {
                     RelationKind::OneToMany => (
-                        rel.reverse_name.clone().unwrap_or_else(|| other_coll.plural_name()),
+                        relation.reverse_name.clone().unwrap_or_else(|| other_coll.plural_name()),
                         RelationKind::OneToMany,
                     ),
                     RelationKind::OneToOne => (
-                        rel.reverse_name.clone().unwrap_or_else(|| other_coll.singular_name()),
+                        relation.reverse_name.clone().unwrap_or_else(|| other_coll.singular_name()),
                         RelationKind::OneToOne,
                     ),
                     _ => continue,
@@ -811,7 +916,7 @@ fn resolve_to_field_value(
     match result {
         Ok(Some(value)) => json_to_field_value(value).map(Some),
         Ok(None) => Ok(None),
-        Err(e) => Err(e),
+        Err(err) => Err(err),
     }
-    .map_err(|e| e.into_graphql_error())
+    .map_err(|err| err.into_graphql_error())
 }
