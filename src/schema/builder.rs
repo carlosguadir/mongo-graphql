@@ -143,14 +143,14 @@ impl<'a> SchemaBuilder<'a> {
         for (_, target_coll_name, _) in &reverse_to_many {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
                 (builder, _) = self.register_reverse_inputs(
-                    builder, collection, target_def, RelationKind::OneToMany, "Create",
+                    builder, collection, target_def, RelationKind::OneToMany,
                 );
             }
         }
         for (_, target_coll_name) in &reverse_to_one {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
                 (builder, _) = self.register_reverse_inputs(
-                    builder, collection, target_def, RelationKind::OneToOne, "Create",
+                    builder, collection, target_def, RelationKind::OneToOne,
                 );
             }
         }
@@ -337,8 +337,6 @@ impl<'a> SchemaBuilder<'a> {
         Ok((builder, query_root, mutation_root))
     }
 
-    // ── Reverse relation collection ──
-
     fn collect_reverse_relations(
         &self,
         collection: &CollectionDef,
@@ -376,8 +374,6 @@ impl<'a> SchemaBuilder<'a> {
         }
         (to_many, to_one)
     }
-
-    // ── Input builders ──
 
     /// Build scalar + relation fields for CreateInput or UpdateInput.
     fn build_input_fields(
@@ -450,13 +446,6 @@ impl<'a> SchemaBuilder<'a> {
         source_coll: &CollectionDef,
         mutation: &str,
     ) -> InputObject {
-        let collection_map: HashMap<&str, &CollectionDef> = self
-            .definition
-            .collections
-            .iter()
-            .map(|c| (c.collection.as_str(), c))
-            .collect();
-
         for field in &target_coll.fields {
             if field.name == "id" || field.name == "_id" {
                 continue;
@@ -465,8 +454,9 @@ impl<'a> SchemaBuilder<'a> {
                 if rel.collection == source_coll.collection {
                     continue;
                 }
-                let target_type = collection_map
-                    .get(rel.collection.as_str())
+                let target_type = self
+                    .definition
+                    .collection_by_name(&rel.collection)
                     .map(|c| c.type_name())
                     .unwrap_or_else(|| rel.collection.clone());
                 let input_name = Self::relation_nested_input_name(
@@ -488,7 +478,35 @@ impl<'a> SchemaBuilder<'a> {
         without_input
     }
 
-    // ── Nested input registration ──
+    /// Ensure a CreateWithout or UpdateWithout input type is registered for
+    /// target_coll with source_coll omitted. Returns the type name.
+    fn ensure_without_type(
+        &mut self,
+        mut builder: AgSchemaBuilder,
+        target_coll: &CollectionDef,
+        source_coll: &CollectionDef,
+        mutation: &str,
+    ) -> (AgSchemaBuilder, String) {
+        let target_type = target_coll.type_name();
+        let source_type = source_coll.type_name();
+        let without_name = match mutation {
+            "Create" => format!("{}CreateWithout{}Input", target_type, source_type),
+            "Update" => format!("{}UpdateWithout{}Input", target_type, source_type),
+            _ => panic!("unknown mutation: {}", mutation),
+        };
+        if !self.registered_nested_inputs.contains(&without_name) {
+            let base = self.build_without_fields(
+                InputObject::new(&without_name), target_coll, source_coll, mutation,
+            );
+            let with_reverse;
+            (builder, with_reverse) = self.add_reverse_fields_to_without(
+                builder, base, target_coll, source_coll,
+            );
+            builder = builder.register(with_reverse);
+            self.registered_nested_inputs.insert(without_name.clone());
+        }
+        (builder, without_name)
+    }
 
     fn register_nested_inputs_for_field(
         &mut self,
@@ -507,31 +525,10 @@ impl<'a> SchemaBuilder<'a> {
         let target_type = target_def.type_name();
         let source_type = source_coll.type_name();
 
-        let create_without = format!("{}CreateWithout{}Input", target_type, source_type);
-        if !self.registered_nested_inputs.contains(&create_without) {
-            let base = self.build_without_fields(
-                InputObject::new(&create_without), target_def, source_coll, "Create",
-            );
-            let with_reverse;
-            (builder, with_reverse) = self.add_reverse_fields_to_without(
-                builder, base, target_def, source_coll, "Create",
-            );
-            builder = builder.register(with_reverse);
-            self.registered_nested_inputs.insert(create_without.clone());
-        }
-
-        let update_without = format!("{}UpdateWithout{}Input", target_type, source_type);
-        if !self.registered_nested_inputs.contains(&update_without) {
-            let base = self.build_without_fields(
-                InputObject::new(&update_without), target_def, source_coll, "Update",
-            );
-            let with_reverse;
-            (builder, with_reverse) = self.add_reverse_fields_to_without(
-                builder, base, target_def, source_coll, "Update",
-            );
-            builder = builder.register(with_reverse);
-            self.registered_nested_inputs.insert(update_without.clone());
-        }
+        let create_without;
+        (builder, create_without) = self.ensure_without_type(builder, target_def, source_coll, "Create");
+        let update_without;
+        (builder, update_without) = self.ensure_without_type(builder, target_def, source_coll, "Update");
 
         let is_to_many = matches!(rel.kind, RelationKind::ManyToMany);
         builder = self.register_one_or_many_inputs(
@@ -606,39 +603,15 @@ impl<'a> SchemaBuilder<'a> {
         source_coll: &CollectionDef,
         target_coll: &CollectionDef,
         kind: RelationKind,
-        _mutation: &str,
     ) -> (AgSchemaBuilder, String) {
         let target_type = target_coll.type_name();
         let source_type = source_coll.type_name();
         let is_to_many = matches!(kind, RelationKind::OneToMany);
 
-        // Build CreateWithout
-        let create_without = format!("{}CreateWithout{}Input", target_type, source_type);
-        if !self.registered_nested_inputs.contains(&create_without) {
-            let base = self.build_without_fields(
-                InputObject::new(&create_without), target_coll, source_coll, "Create",
-            );
-            let with_reverse;
-            (builder, with_reverse) = self.add_reverse_fields_to_without(
-                builder, base, target_coll, source_coll, "Create",
-            );
-            builder = builder.register(with_reverse);
-            self.registered_nested_inputs.insert(create_without.clone());
-        }
-
-        // Build UpdateWithout
-        let update_without = format!("{}UpdateWithout{}Input", target_type, source_type);
-        if !self.registered_nested_inputs.contains(&update_without) {
-            let base = self.build_without_fields(
-                InputObject::new(&update_without), target_coll, source_coll, "Update",
-            );
-            let with_reverse;
-            (builder, with_reverse) = self.add_reverse_fields_to_without(
-                builder, base, target_coll, source_coll, "Update",
-            );
-            builder = builder.register(with_reverse);
-            self.registered_nested_inputs.insert(update_without.clone());
-        }
+        let create_without;
+        (builder, create_without) = self.ensure_without_type(builder, target_coll, source_coll, "Create");
+        let update_without;
+        (builder, update_without) = self.ensure_without_type(builder, target_coll, source_coll, "Update");
 
         builder = self.register_one_or_many_inputs(
             builder, &target_type, &source_type, &create_without, &update_without, is_to_many,
@@ -661,7 +634,6 @@ impl<'a> SchemaBuilder<'a> {
         mut without_input: InputObject,
         target_coll: &CollectionDef,
         source_coll: &CollectionDef,
-        mutation: &str,
     ) -> (AgSchemaBuilder, InputObject) {
         for other_coll in &self.definition.collections {
             if other_coll.collection == target_coll.collection {
@@ -690,7 +662,7 @@ impl<'a> SchemaBuilder<'a> {
                 };
                 let type_name;
                 (builder, type_name) = self.register_reverse_inputs(
-                    builder, target_coll, other_coll, kind, mutation,
+                    builder, target_coll, other_coll, kind,
                 );
                 without_input = without_input.field(InputValue::new(
                     reverse_name,
@@ -709,8 +681,6 @@ impl<'a> SchemaBuilder<'a> {
             _ => panic!("unknown mutation: {}", mutation),
         }
     }
-
-    // ── Enum & filter registration ──
 
     fn register_enum(
         &mut self,
@@ -796,8 +766,6 @@ impl<'a> SchemaBuilder<'a> {
                 .field(InputValue::new("lte", TypeRef::named("DateTime"))))
     }
 }
-
-// ── Free helpers ──
 
 fn extract_nested(parent: &async_graphql::Value, field_name: &str) -> Option<async_graphql::Value> {
     match parent {
