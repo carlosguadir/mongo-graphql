@@ -1,10 +1,9 @@
 use crate::error::GraphQLError;
-use crate::schema::definition::{CollectionDef, FieldType};
+use crate::schema::definition::{CollectionDef, FieldType, RelationKind};
 use async_graphql::dynamic::FieldValue;
 use mongodb::bson::Bson;
 
 /// Convert a MongoDB document to a GraphQL-compatible JSON value.
-/// Applies name mapping (MongoDB → GraphQL) and omits relation fields in V1.
 pub fn document_to_graphql_value(
     doc: &mongodb::bson::Document,
     collection_def: &CollectionDef,
@@ -12,8 +11,15 @@ pub fn document_to_graphql_value(
     let mut map = serde_json::Map::new();
 
     for field_def in &collection_def.fields {
-        // V1: skip relation fields in output
-        if matches!(field_def.field_type, FieldType::Relation(_)) {
+        if let FieldType::Relation(rel) = &field_def.field_type {
+            match rel.kind {
+                RelationKind::OneToMany | RelationKind::OneToOne => {
+                    if let Some(bson) = doc.get(&field_def.name) {
+                        map.insert(field_def.name.clone(), bson_to_json(bson));
+                    }
+                }
+                RelationKind::ManyToMany => {}
+            }
             continue;
         }
 
