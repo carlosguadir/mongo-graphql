@@ -441,12 +441,20 @@ impl<'a> SchemaBuilder<'a> {
 
     /// Build the scalar fields for a `CreateWithout` input.
     /// Skips id/_id and relations pointing back to `source_coll`.
+    /// Forward relations to other collections are kept as nested inputs.
     fn build_create_without_fields(
         &self,
         mut without_input: InputObject,
         target_coll: &CollectionDef,
         source_coll: &CollectionDef,
     ) -> InputObject {
+        let collection_map: HashMap<&str, &CollectionDef> = self
+            .definition
+            .collections
+            .iter()
+            .map(|c| (c.collection.as_str(), c))
+            .collect();
+
         for field in &target_coll.fields {
             if field.name == "id" || field.name == "_id" {
                 continue;
@@ -455,6 +463,14 @@ impl<'a> SchemaBuilder<'a> {
                 if rel.collection == source_coll.collection {
                     continue;
                 }
+                let target_type = collection_map
+                    .get(rel.collection.as_str())
+                    .map(|c| c.type_name())
+                    .unwrap_or_else(|| rel.collection.clone());
+                let input_name = Self::relation_nested_input_name(rel.kind, &target_type, "Create");
+                without_input =
+                    without_input.field(InputValue::new(field.graphql_name(), TypeRef::named(&input_name)));
+                continue;
             }
             let field_type = scalars::type_ref(&field.field_type);
             let input_type = if field.required {
