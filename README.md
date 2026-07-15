@@ -145,10 +145,12 @@ cargo test --test pagination_tests
 # Lambda binary (build)
 cargo build --features lambda
 
-# Lambda binary (run — requires MONGO_URI + DATABASE_NAME)
-cargo run --features lambda
-
 # Local Lambda dev server with hot reload (requires cargo-lambda + MongoDB)
+
+# .env file
+# MONGO_URI=mongodb://localhost:27017
+# DATABASE_NAME=mongo-graphql
+
 cargo lambda watch --features lambda
 
 # Watch mode (requires cargo-watch)
