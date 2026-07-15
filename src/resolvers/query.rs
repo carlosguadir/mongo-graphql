@@ -10,37 +10,37 @@ use crate::schema::definition::CollectionDef;
 
 pub async fn resolve_get(
     ctx: ResolverContext<'_>,
-    coll_def: &CollectionDef,
+    collection_def: &CollectionDef,
     db: &Database,
 ) -> Result<Option<serde_json::Value>, GraphQLError> {
-    let coll = db.collection::<mongodb::bson::Document>(&coll_def.collection);
+    let collection = db.collection::<mongodb::bson::Document>(&collection_def.collection);
 
     let where_input: mongodb::bson::Document = ctx
         .args
         .try_get("where")?
         .deserialize()
-        .map_err(|e| GraphQLError::Internal(e.message))?;
+        .map_err(|err| GraphQLError::Internal(err.message))?;
 
     let filter = transform_id_filter(where_input)?;
 
-    let document = coll
+    let document = collection
         .find_one(filter)
         .await
         ?;
 
     match document {
-        Some(d) => Ok(Some(document_to_graphql_value(&d, coll_def))),
+        Some(d) => Ok(Some(document_to_graphql_value(&d, collection_def))),
         None => Ok(None),
     }
 }
 
 pub async fn resolve_list(
     ctx: ResolverContext<'_>,
-    coll_def: &CollectionDef,
+    collection_def: &CollectionDef,
     db: &Database,
     max_page_size: usize,
 ) -> Result<serde_json::Value, GraphQLError> {
-    let coll = db.collection::<mongodb::bson::Document>(&coll_def.collection);
+    let collection = db.collection::<mongodb::bson::Document>(&collection_def.collection);
 
     let first: Option<i64> = try_deserialize_optional(&ctx.args, "first")?;
     let after: Option<String> = try_deserialize_optional(&ctx.args, "after")?;
@@ -53,7 +53,7 @@ pub async fn resolve_list(
 
     let raw_filter: mongodb::bson::Document =
         try_deserialize_optional(&ctx.args, "where")?.unwrap_or_default();
-    let base_filter = transform_where_filter(raw_filter, coll_def)?;
+    let base_filter = transform_where_filter(raw_filter, collection_def)?;
 
     let filter = if is_backward {
         if let Some(before) = &pagination.before {
@@ -71,12 +71,11 @@ pub async fn resolve_list(
         }
     };
 
-    // Build sort from SortInput: map GraphQL field names to MongoDB names.
     let sort_raw: mongodb::bson::Document =
         try_deserialize_optional(&ctx.args, "sort")?.unwrap_or_else(|| doc! { "_id": if is_backward { -1 } else { 1 } });
     let mut sort = mongodb::bson::Document::new();
     for (gql_field, direction) in &sort_raw {
-        let mongo_name = graphql_to_mongo_field(gql_field, coll_def);
+        let mongo_name = graphql_to_mongo_field(gql_field, collection_def);
         let dir = direction.as_i32().unwrap_or(1);
         sort.insert(mongo_name, dir);
     }
@@ -85,7 +84,7 @@ pub async fn resolve_list(
     let sort_direction: i32 = if is_backward { -1 } else { 1 };
     sort.insert("_id", sort_direction);
 
-    let mut cursor = coll
+    let mut cursor = collection
         .find(filter)
         .sort(sort)
         .limit(limit + 1)
@@ -114,7 +113,7 @@ pub async fn resolve_list(
 
     let edges: Vec<serde_json::Value> = docs
         .iter()
-        .map(|document| document_to_graphql_value(document, coll_def))
+        .map(|document| document_to_graphql_value(document, collection_def))
         .collect();
 
     let start_cursor = docs
@@ -139,7 +138,7 @@ pub async fn resolve_list(
         pagination.after.is_some()
     };
 
-    let total_count = coll.count_documents(base_filter).await?;
+    let total_count = collection.count_documents(base_filter).await?;
 
     Ok(serde_json::json!({
         "edges": edges,
@@ -160,10 +159,10 @@ pub(crate) fn try_deserialize_optional<T: serde::de::DeserializeOwned>(
     name: &str,
 ) -> Result<Option<T>, GraphQLError> {
     match args.get(name) {
-        Some(value) => value.deserialize().map(Some).map_err(|e| {
+        Some(value) => value.deserialize().map(Some).map_err(|err| {
             GraphQLError::Internal(format!(
                 "Failed to parse argument '{}': {}",
-                name, e.message
+                name, err.message
             ))
         }),
         None => Ok(None),
@@ -189,11 +188,11 @@ pub(crate) fn transform_id_filter(
 /// and `{"id": {"ne": "hex"}}` → `{"_id": {"$ne": ObjectId("hex")}}`.
 fn transform_where_filter(
     filter: mongodb::bson::Document,
-    coll_def: &CollectionDef,
+    collection_def: &CollectionDef,
 ) -> Result<mongodb::bson::Document, GraphQLError> {
     let mut result = mongodb::bson::Document::new();
     for (key, value) in filter {
-        let mongo_key = graphql_to_mongo_field(&key, coll_def);
+        let mongo_key = graphql_to_mongo_field(&key, collection_def);
         let is_id_field = mongo_key == "_id";
 
         match value {
@@ -244,15 +243,15 @@ fn transform_where_filter(
 }
 
 /// Map a GraphQL field name to its MongoDB field name for a given collection.
-fn graphql_to_mongo_field(gql_field: &str, coll_def: &CollectionDef) -> String {
+fn graphql_to_mongo_field(gql_field: &str, collection_def: &CollectionDef) -> String {
     if gql_field == "id" {
         return "_id".to_string();
     }
-    coll_def
+    collection_def
         .fields
         .iter()
-        .find(|f| f.graphql_name() == gql_field)
-        .map(|f| f.name.clone())
+        .find(|field| field.graphql_name() == gql_field)
+        .map(|field| field.name.clone())
         .unwrap_or_else(|| gql_field.to_string())
 }
 

@@ -63,7 +63,7 @@ pub fn bson_to_json(bson: &Bson) -> serde_json::Value {
         }
         Bson::Document(subdoc) => {
             serde_json::Value::Object(
-                subdoc.iter().map(|(k, v)| (k.clone(), bson_to_json(v))).collect(),
+                subdoc.iter().map(|(key, value)| (key.clone(), bson_to_json(value))).collect(),
             )
         }
         Bson::Null | Bson::Undefined => serde_json::Value::Null,
@@ -75,15 +75,15 @@ pub fn bson_to_json(bson: &Bson) -> serde_json::Value {
 /// Relation fields with hex string values are converted to ObjectId.
 /// Fields without an explicit `graphql_name` are returned unchanged.
 /// TODO this function look unnecessary, let's review
-pub fn input_doc_to_mongo(doc: mongodb::bson::Document, coll_def: &CollectionDef) -> mongodb::bson::Document {
+pub fn input_doc_to_mongo(doc: mongodb::bson::Document, collection_def: &CollectionDef) -> mongodb::bson::Document {
     let mut mapped = mongodb::bson::Document::new();
     for (key, value) in doc {
-        let field_def = coll_def
+        let field_def = collection_def
             .fields
             .iter()
-            .find(|f| f.graphql_name() == key);
+            .find(|field| field.graphql_name() == key);
         let mongo_name = field_def
-            .map(|f| f.name.clone())
+            .map(|field| field.name.clone())
             .unwrap_or_else(|| key.clone());
 
         let mapped_value = match field_def {

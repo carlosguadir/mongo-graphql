@@ -22,7 +22,7 @@ pub async fn resolve_create(
         .args
         .try_get("input")?
         .deserialize()
-        .map_err(|e| GraphQLError::Internal(e.message))?;
+        .map_err(|err| GraphQLError::Internal(err.message))?;
 
     let oid = ObjectId::new();
 
@@ -39,13 +39,13 @@ pub async fn resolve_create(
         doc.insert("_id", oid);
         doc.insert("id", oid);
 
-        collection.insert_one(&doc).session(&mut session).await.map_err(|e| {
-            if is_duplicate_key_error(&e) {
+        collection.insert_one(&doc).session(&mut session).await.map_err(|err| {
+            if is_duplicate_key_error(&err) {
                 GraphQLError::DuplicateKey {
                     message: format!("Duplicate key in collection '{}'", collection_def.collection),
                 }
             } else {
-                GraphQLError::from(e)
+                GraphQLError::from(err)
             }
         })?;
 
@@ -66,12 +66,12 @@ pub async fn resolve_update(
         .args
         .try_get("where")?
         .deserialize()
-        .map_err(|e| GraphQLError::Internal(e.message))?;
+        .map_err(|err| GraphQLError::Internal(err.message))?;
     let mut update_input: Document = ctx
         .args
         .try_get("input")?
         .deserialize()
-        .map_err(|e| GraphQLError::Internal(e.message))?;
+        .map_err(|err| GraphQLError::Internal(err.message))?;
 
     let filter = transform_id_filter(where_input)?;
 
@@ -133,7 +133,7 @@ pub async fn resolve_delete(
         .args
         .try_get("where")?
         .deserialize()
-        .map_err(|e| GraphQLError::Internal(e.message))?;
+        .map_err(|err| GraphQLError::Internal(err.message))?;
 
     let id = where_input
         .get_str("id")
@@ -270,15 +270,15 @@ async fn extract_relation_fields(
     let relation_field_keys: HashSet<String> = collection_def
         .fields
         .iter()
-        .filter(|f| matches!(f.field_type, FieldType::Relation(_)))
-        .map(|f| f.graphql_name())
+        .filter(|field| matches!(field.field_type, FieldType::Relation(_)))
+        .map(|field| field.graphql_name())
         .collect();
 
     for field_name in &relation_field_keys {
         let field_def = collection_def
             .fields
             .iter()
-            .find(|f| f.graphql_name() == *field_name)
+            .find(|field| field.graphql_name() == *field_name)
             .unwrap();
 
         let relation = match &field_def.field_type {
@@ -609,8 +609,8 @@ async fn process_reverse_one_to_one_input(
             )
             .session(&mut *session)
             .await
-            .map_err(|e| {
-                GraphQLError::Internal(format!("Reverse OneToOne connect failed: {}", e))
+            .map_err(|err| {
+                GraphQLError::Internal(format!("Reverse OneToOne connect failed: {}", err))
             })?;
     }
 
@@ -630,8 +630,8 @@ async fn process_reverse_one_to_one_input(
             )
             .session(&mut *session)
             .await
-            .map_err(|e| {
-                GraphQLError::Internal(format!("Reverse OneToOne disconnect failed: {}", e))
+            .map_err(|err| {
+                GraphQLError::Internal(format!("Reverse OneToOne disconnect failed: {}", err))
             })?;
     }
 
@@ -640,8 +640,8 @@ async fn process_reverse_one_to_one_input(
             .delete_many(doc! { fk_field: source_oid })
             .session(&mut *session)
             .await
-            .map_err(|e| {
-                GraphQLError::Internal(format!("Reverse OneToOne delete failed: {}", e))
+            .map_err(|err| {
+                GraphQLError::Internal(format!("Reverse OneToOne delete failed: {}", err))
             })?;
     }
 
@@ -697,8 +697,8 @@ async fn create_nested_document(
         .insert_one(&target_doc)
         .session(&mut *session)
         .await
-        .map_err(|e| {
-            if is_duplicate_key_error(&e) {
+        .map_err(|err| {
+            if is_duplicate_key_error(&err) {
                 GraphQLError::DuplicateKey {
                     message: format!(
                         "Duplicate key in nested create for collection '{}'",
@@ -706,7 +706,7 @@ async fn create_nested_document(
                     ),
                 }
             } else {
-                GraphQLError::from(e)
+                GraphQLError::from(err)
             }
         })?;
 
@@ -765,8 +765,8 @@ fn build_current_fk_map(
     collection_def
         .fields
         .iter()
-        .filter(|f| matches!(f.field_type, FieldType::Relation(_)))
-        .map(|f| (f.graphql_name(), existing.get(&f.name).cloned()))
+        .filter(|field| matches!(field.field_type, FieldType::Relation(_)))
+        .map(|field| (field.graphql_name(), existing.get(&field.name).cloned()))
         .collect()
 }
 
@@ -792,14 +792,14 @@ fn parse_id_array(
 macro_rules! with_transaction {
     ($client:expr, $session:ident, $body:block) => {{
         let mut $session = $client.start_session().await?;
-        $session.start_transaction().await.map_err(|e| {
-            GraphQLError::Internal(format!("Failed to start transaction: {}", e))
+        $session.start_transaction().await.map_err(|err| {
+            GraphQLError::Internal(format!("Failed to start transaction: {}", err))
         })?;
         let __result: Result<_, GraphQLError> = (|| async { $body })().await;
         match &__result {
             Ok(_) => {
-                $session.commit_transaction().await.map_err(|e| {
-                    GraphQLError::Internal(format!("Failed to commit transaction: {}", e))
+                $session.commit_transaction().await.map_err(|err| {
+                    GraphQLError::Internal(format!("Failed to commit transaction: {}", err))
                 })?;
             }
             Err(_) => {
