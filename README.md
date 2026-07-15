@@ -1,31 +1,8 @@
-# mongo-graphql
+# MongoDB GraphQL
 
 Dynamic GraphQL schema generation from MongoDB collections, optimized for AWS Lambda.
 
-Given a JSON schema definition describing your MongoDB collections, this library generates a fully functional [Relay-compliant](https://relay.dev/graphql/connections.htm) GraphQL API at runtime — no code generation, no schema duplication.
-
-## Stack
-
-| Component | Version |
-|-----------|---------|
-| Rust | 1.97 (edition 2024) |
-| async-graphql | 7.2 (dynamic-schema) |
-| mongodb | 3.8 |
-| tokio | 1.52 |
-| chrono | 0.4 |
-| base64 | 0.22 |
-
-## Features
-
-- **Dynamic schema** — define collections, fields, relations, and enums in a single JSON file
-- **Relay pagination** — cursor-based connections with `hasNextPage`, `hasPreviousPage`, `startCursor`, `endCursor`, `totalCount`
-- **CRUD operations** — `findOne`, `list` (paginated), `create`, `update`, `delete` generated per collection
-- **Type mapping** — BSON ↔ GraphQL scalars: `ObjectId` → `ID`, `DateTime` → ISO 8601, `Double` → `Float`, `Int32/Int64` → `Int`
-- **Enum support** — enum types with deduplication across collections
-- **Input validation** — `deny_unknown_fields`, GraphQL identifier validation, many-to-many junction cardinality, enum value dedup
-- **Relay `IdFilter`** — `eq` / `ne` operators translated to MongoDB `$eq` / `$ne` with ObjectId parsing
-- **Structured errors** — `NOT_FOUND`, `UNAUTHORIZED`, `FORBIDDEN`, `DUPLICATE_KEY`, `INVALID_CURSOR` codes; internal errors hidden from clients
-- **AWS Lambda** — binary target with cold-start schema caching via `Arc`, embedded schema via `include_str!`
+Given a JSON schema definition describing your MongoDB collections, this library generates a fully functional GraphQL API at runtime — no code generation, no schema duplication.
 
 ## Quick start
 
@@ -233,17 +210,6 @@ curl -s -X POST http://localhost:9000 \
 | `DATABASE_NAME` | yes | — | Target database name |
 | `MAX_PAGE_SIZE` | no | `100` | Max items per paginated query |
 | `SCHEMA_PATH` | no | embedded at build time | Path to schema JSON |
-
-### Cold start flow
-
-1. Lambda runtime starts → `main()`
-2. Reads `MONGO_URI` + `DATABASE_NAME` from env
-3. Connects to MongoDB → validates with `ping`
-4. Loads schema definition (embedded or `SCHEMA_PATH`)
-5. Parses + validates schema → builds `DynamicSchema`
-6. Registers with Lambda runtime → begins handling requests
-
-On warm starts the `Arc<Schema>` is reused — no MongoDB reconnect, no schema rebuild.
 
 ## API error codes
 
