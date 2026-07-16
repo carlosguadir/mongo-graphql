@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::de;
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +17,31 @@ impl SchemaDefinition {
     }
 }
 
+/// A single directive invocation: `@name(args...)`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DirectiveDef {
+    pub name: String,
+    #[serde(default)]
+    pub args: HashMap<String, serde_json::Value>,
+}
+
+/// Per-operation directives for auto-generated query/mutation root fields.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FieldDirectives {
+    #[serde(default)]
+    pub get: Vec<DirectiveDef>,
+    #[serde(default)]
+    pub list: Vec<DirectiveDef>,
+    #[serde(default)]
+    pub create: Vec<DirectiveDef>,
+    #[serde(default)]
+    pub update: Vec<DirectiveDef>,
+    #[serde(default)]
+    pub delete: Vec<DirectiveDef>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CollectionDef {
@@ -25,6 +52,9 @@ pub struct CollectionDef {
 
     #[serde(default)]
     pub description: Option<String>,
+
+    #[serde(default)]
+    pub directives: FieldDirectives,
 
     pub fields: Vec<FieldDef>,
 }
