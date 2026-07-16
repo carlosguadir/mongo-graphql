@@ -17,6 +17,14 @@ pub struct RuntimeConfig {
     pub max_page_size: usize,
 }
 
+enum Operation {
+    Get,
+    List,
+    Create,
+    Update,
+    Delete,
+}
+
 pub struct SchemaBuilder<'a> {
     config: &'a RuntimeConfig,
     definition: &'a SchemaDefinition,
@@ -318,7 +326,7 @@ impl<'a> SchemaBuilder<'a> {
 
         let coll_for_get = collection.clone();
         let db_for_get = db.clone();
-        query_root = query_root.field(
+        query_root = query_root.field(Self::apply_directives(
             Field::new(collection.singular_name(), object_ref.clone(), move |ctx| {
                 let coll_def = coll_for_get.clone();
                 let db = db_for_get.clone();
@@ -336,12 +344,14 @@ impl<'a> SchemaBuilder<'a> {
                 "where",
                 TypeRef::named_nn(format!("{}WhereUniqueInput", type_name)),
             )),
-        );
+            &collection.directives,
+            Operation::Get,
+        ));
 
         let coll_for_list = collection.clone();
         let db_for_list = db.clone();
         let page_size = self.config.max_page_size;
-        query_root = query_root.field(
+        query_root = query_root.field(Self::apply_directives(
             Field::new(
                 collection.plural_name(),
                 TypeRef::named_nn(conn_name.clone()),
@@ -364,12 +374,14 @@ impl<'a> SchemaBuilder<'a> {
             .argument(InputValue::new("before", TypeRef::named("String")))
             .argument(InputValue::new("where", TypeRef::named(format!("{}WhereInput", type_name))))
             .argument(InputValue::new("sort", TypeRef::named(format!("{}SortInput", type_name)))),
-        );
+            &collection.directives,
+            Operation::List,
+        ));
 
         let coll_for_create = collection.clone();
         let client_for_create = client.clone();
         let db_for_create = db.clone();
-        mutation_root = mutation_root.field(
+        mutation_root = mutation_root.field(Self::apply_directives(
             Field::new(
                 format!("create{}", type_name),
                 object_ref.clone(),
@@ -387,12 +399,14 @@ impl<'a> SchemaBuilder<'a> {
                 "input",
                 TypeRef::named_nn(format!("{}CreateInput", type_name)),
             )),
-        );
+            &collection.directives,
+            Operation::Create,
+        ));
 
         let coll_for_update = collection.clone();
         let client_for_update = client.clone();
         let db_for_update = db.clone();
-        mutation_root = mutation_root.field(
+        mutation_root = mutation_root.field(Self::apply_directives(
             Field::new(
                 format!("update{}", type_name),
                 object_ref.clone(),
@@ -414,12 +428,14 @@ impl<'a> SchemaBuilder<'a> {
                 "input",
                 TypeRef::named_nn(format!("{}UpdateInput", type_name)),
             )),
-        );
+            &collection.directives,
+            Operation::Update,
+        ));
 
         let coll_for_delete = collection.clone();
         let client_for_delete = client.clone();
         let db_for_delete = db.clone();
-        mutation_root = mutation_root.field(
+        mutation_root = mutation_root.field(Self::apply_directives(
             Field::new(
                 format!("delete{}", type_name),
                 TypeRef::named_nn("DeleteResult"),
@@ -437,9 +453,40 @@ impl<'a> SchemaBuilder<'a> {
                 "where",
                 TypeRef::named_nn(format!("{}WhereUniqueInput", type_name)),
             )),
-        );
+            &collection.directives,
+            Operation::Delete,
+        ));
 
         Ok((builder, query_root, mutation_root))
+    }
+
+    fn apply_directives(
+        field: Field,
+        directive_defs: &crate::schema::definition::FieldDirectives,
+        op: Operation,
+    ) -> Field {
+        let directives = match op {
+            Operation::Get => &directive_defs.get,
+            Operation::List => &directive_defs.list,
+            Operation::Create => &directive_defs.create,
+            Operation::Update => &directive_defs.update,
+            Operation::Delete => &directive_defs.delete,
+        };
+        if directives.is_empty() {
+            return field;
+        }
+        let mut built_field = field;
+        for directive_def in directives {
+            let mut graphql_directive =
+                async_graphql::dynamic::Directive::new(directive_def.name.clone());
+            for (arg_name, arg_value) in &directive_def.args {
+                let graphql_value = async_graphql::Value::from_json(arg_value.clone())
+                    .unwrap_or(async_graphql::Value::Null);
+                graphql_directive = graphql_directive.argument(arg_name.as_str(), graphql_value);
+            }
+            built_field = built_field.directive(graphql_directive);
+        }
+        built_field
     }
 
     fn collect_reverse_relations(
