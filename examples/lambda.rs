@@ -27,7 +27,7 @@ async fn handler(
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    let result = executor::execute(&schema, query, variables).await?;
+    let result = executor::execute(&schema, query, variables, None).await?;
 
     Ok(ApiGatewayV2httpResponse {
         status_code: 200,
@@ -68,7 +68,7 @@ async fn build_schema() -> Result<async_graphql::dynamic::Schema, Error> {
         max_page_size,
     };
     let schema = SchemaBuilder::new(&config, &definition)
-        .build(client, db)
+        .build(client, db, None)
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
 
