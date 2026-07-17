@@ -119,6 +119,7 @@ mod tests {
                     hero_oid.to_hex()
                 ),
                 async_graphql::Variables::default(),
+                None,
             )
             .await
             .unwrap();
@@ -219,6 +220,7 @@ mod tests {
                     lair_oid.to_hex()
                 ),
                 async_graphql::Variables::default(),
+                None,
             )
             .await
             .unwrap();
@@ -333,6 +335,7 @@ mod tests {
                     power_oid.to_hex()
                 ),
                 async_graphql::Variables::default(),
+                None,
             )
             .await
             .unwrap();
@@ -473,6 +476,7 @@ mod tests {
                     mission_oid.to_hex()
                 ),
                 async_graphql::Variables::default(),
+                None,
             )
             .await
             .unwrap();

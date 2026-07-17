@@ -50,7 +50,7 @@ mod tests {
                 page_size, after_clause, prefix
             );
 
-            let result = executor::execute(schema, &query, async_graphql::Variables::default())
+            let result = executor::execute(schema, &query, async_graphql::Variables::default(), None)
                 .await
                 .unwrap();
 

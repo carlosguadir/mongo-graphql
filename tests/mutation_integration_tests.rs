@@ -30,6 +30,7 @@ mod tests {
                 }) { id alias power_level }
             }"#,
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -57,6 +58,7 @@ mod tests {
                 }) { id alias }
             }"#,
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -77,6 +79,7 @@ mod tests {
                 update_id
             ),
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -104,6 +107,7 @@ mod tests {
                 }) { id }
             }"#,
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -124,6 +128,7 @@ mod tests {
                 delete_id
             ),
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();

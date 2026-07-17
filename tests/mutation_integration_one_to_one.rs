@@ -47,6 +47,7 @@ mod tests {
                 prefix, lair_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -90,6 +91,7 @@ mod tests {
                 prefix, prefix
             ),
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -161,6 +163,7 @@ mod tests {
                 disconn_hero_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -220,6 +223,7 @@ mod tests {
                 del_hero_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -269,6 +273,7 @@ mod tests {
                 prefix, reverse_hero_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -316,6 +321,7 @@ mod tests {
                 prefix, prefix
             ),
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -381,6 +387,7 @@ mod tests {
                 disconnect_lair_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();
@@ -443,6 +450,7 @@ mod tests {
                 delete_lair_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
         )
         .await
         .unwrap();

@@ -40,7 +40,7 @@ mod helpers {
                     max_page_size: 100,
                 };
                 SchemaBuilder::new(&config, &definition)
-                    .build(client, db)
+                    .build(client, db, None)
                     .await
                     .expect("schema build")
             })

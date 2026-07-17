@@ -118,6 +118,7 @@ mod tests {
                     }
                 }"#,
                 async_graphql::Variables::default(),
+                None,
             )
             .await
             .unwrap();
@@ -220,6 +221,7 @@ mod tests {
                     }
                 }"#,
                 async_graphql::Variables::default(),
+                None,
             )
             .await
             .unwrap();
@@ -338,6 +340,7 @@ mod tests {
                     }
                 }"#,
                 async_graphql::Variables::default(),
+                None,
             )
             .await
             .unwrap();
@@ -480,6 +483,7 @@ mod tests {
                     }
                 }"#,
                 async_graphql::Variables::default(),
+                None,
             )
             .await
             .unwrap();
