@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use async_graphql::dynamic::{
     Field, FieldFuture, FieldValue, InputObject, InputValue, Object, Schema,
     SchemaBuilder as AgSchemaBuilder, TypeRef,
 };
+use async_graphql::extensions::{Extension, ExtensionFactory};
 use mongodb::{Client, Database};
 
 use crate::error::GraphQLError;
@@ -24,6 +26,13 @@ enum Operation {
     Update,
     Delete,
 }
+struct BoxedExtensionFactory(Box<dyn ExtensionFactory>);
+
+impl ExtensionFactory for BoxedExtensionFactory {
+    fn create(&self) -> Arc<dyn Extension> {
+        self.0.create()
+    }
+}
 
 pub struct SchemaBuilder<'a> {
     config: &'a RuntimeConfig,
@@ -42,7 +51,12 @@ impl<'a> SchemaBuilder<'a> {
         }
     }
 
-    pub async fn build(mut self, client: Client, db: Database) -> Result<Schema, GraphQLError> {
+    pub async fn build(
+        mut self,
+        client: Client,
+        db: Database,
+        extensions: Option<Vec<Box<dyn ExtensionFactory>>>,
+    ) -> Result<Schema, GraphQLError> {
         let mut ping_cmd = mongodb::bson::Document::new();
         ping_cmd.insert("ping", 1);
         db.run_command(ping_cmd)
@@ -50,6 +64,9 @@ impl<'a> SchemaBuilder<'a> {
             .map_err(|err| GraphQLError::Database(format!("Database ping failed: {}", err)))?;
 
         let mut builder = Schema::build("Query", Some("Mutation"), None);
+        for extension in extensions.into_iter().flatten() {
+            builder = builder.extension(BoxedExtensionFactory(extension));
+        }
         builder = scalars::register_all(builder);
         builder = self.register_page_info(builder);
         builder = self.register_delete_result(builder);
