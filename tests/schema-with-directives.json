@@ -1,0 +1,41 @@
+{
+  "collections": [
+    {
+      "collection": "hero",
+      "graphql_name": "Hero",
+      "description": "Superheroes registered in the league",
+      "directives": {
+        "get":    [{ "name": "auth", "args": { "requires": "ADMIN" } }],
+        "list":   [{ "name": "auth", "args": { "requires": "USER" } }],
+        "create": [{ "name": "auth", "args": { "requires": "ADMIN" } }],
+        "update": [{ "name": "auth", "args": { "requires": "ADMIN" } }],
+        "delete": [{ "name": "auth", "args": { "requires": "ADMIN" } }]
+      },
+      "fields": [
+        { "name": "id", "type": "ID", "required": true },
+        { "name": "alias", "type": "String", "required": true, "unique": true },
+        { "name": "power_level", "type": "Int", "required": true },
+        { "name": "active", "type": "Boolean", "required": true },
+        { "name": "rank", "type": "String", "enum": { "name": "Rank", "values": ["OMEGA", "ALPHA", "BETA", "GAMMA", "DELTA"] } },
+        { "name": "joined_at", "type": "DateTime", "required": true },
+        {
+          "name": "team_id",
+          "graphql_name": "team",
+          "type": { "relation": { "kind": "one_to_many", "collection": "team", "reference_field": "id" } }
+        },
+        { "name": "created_at", "type": "DateTime", "required": true },
+        { "name": "updated_at", "type": "DateTime" }
+      ]
+    },
+    {
+      "collection": "team",
+      "graphql_name": "Team",
+      "description": "Teams and factions",
+      "fields": [
+        { "name": "id", "type": "ID", "required": true },
+        { "name": "name", "type": "String", "required": true, "unique": true },
+        { "name": "created_at", "type": "DateTime", "required": true }
+      ]
+    }
+  ]
+}

@@ -119,17 +119,6 @@ cargo test --features integration
 # Specific test file
 cargo test --test pagination_tests
 
-# Lambda binary (build)
-cargo build --features lambda
-
-# Local Lambda dev server with hot reload (requires cargo-lambda + MongoDB)
-
-# .env file
-# MONGO_URI=mongodb://localhost:27017
-# DATABASE_NAME=mongo-graphql
-
-cargo lambda watch --features lambda
-
 # Watch mode (requires cargo-watch)
 cargo watch -x test
 ```
@@ -155,31 +144,6 @@ schema-definition.json
   executor::execute    ← query + variables → JSON response
 ```
 
-### Source tree
-
-```
-src/
-├── lib.rs                    # crate root
-├── error.rs                  # GraphQLError (11 variants + error codes)
-├── executor.rs               # execute(schema, query, variables) → JSON
-├── helpers/
-│   └── serialization.rs      # BSON ↔ JSON, document_to_graphql_value, input_doc_to_mongo
-├── resolvers/
-│   ├── query.rs              # resolve_get, resolve_list, transform_id_filter, transform_where_filter
-│   ├── mutation.rs           # resolve_create, resolve_update, resolve_delete
-│   └── pagination.rs         # PaginationArgs, encode/decode cursor
-├── schema/
-│   ├── definition.rs         # Schema data model (CollectionDef, FieldDef, FieldType, …)
-│   ├── parser.rs             # JSON parsing + validation
-│   ├── builder.rs            # DynamicSchema construction (SchemaBuilder)
-│   └── inflect.rs            # to_plural, to_pascal_singular
-└── types/
-    └── scalars.rs            # DateTime/Json scalar registration + type_ref mapping
-
-examples/
-└── lambda.rs                 # AWS Lambda handler (API Gateway V2 → GraphQL endpoint)
-```
-
 ## Local development
 
 ```bash
@@ -187,11 +151,11 @@ examples/
 cargo install cargo-lambda
 
 # Start MongoDB (if not running)
-docker run -d --name mongo-dev -p 27017:27017 mongo:7
+docker run -d --name mongo-dev -p 27017:27017 mongo:latest
 
 # Start local Lambda emulator
 MONGO_URI=mongodb://localhost:27017 DATABASE_NAME=test_graphql_mongodb \
-  cargo lambda watch --example lambda
+  cargo lambda watch --bin standard --features lambda
 ```
 
 The emulator exposes `http://localhost:9000`. Send GraphQL queries via POST:
