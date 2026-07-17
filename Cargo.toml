@@ -9,7 +9,7 @@ repository = "https://github.com/carlosguadir/mongo-graphql"
 keywords = ["mongodb", "graphql", "dynamic-schema", "lambda"]
 categories = ["database", "web-programming"]
 autoexamples = false
-exclude = ["CLAUDE.md", ".gitignore", "PLAN.md"]
+exclude = [".gitignore"]
 
 [features]
 integration = []
@@ -21,8 +21,8 @@ path = "examples/lambda.rs"
 required-features = ["lambda"]
 
 [[bin]]
-name = "directives"
-path = "examples/directives.rs"
+name = "extensions"
+path = "examples/extensions.rs"
 required-features = ["lambda"]
 
 [dependencies]

@@ -15,17 +15,11 @@ use mongo_graphql::executor;
 use mongo_graphql::schema::builder::{RuntimeConfig, SchemaBuilder};
 use mongo_graphql::schema::parser::SchemaParser;
 
-/// Schema definition embedded at compile time.
 const DEFAULT_SCHEMA: &str = include_str!("../tests/schema-with-directives.json");
 
-/// Per-request auth claims extracted from the API Gateway JWT authorizer,
-/// injected into the request via the executor's optional `Data` argument.
 #[derive(Debug, Clone, Default)]
 struct AuthClaims(#[allow(dead_code)] HashMap<String, String>); // read via Debug only
 
-/// Extension factory that logs every top-level `Query.*` and `Mutation.*`
-/// resolver execution: arguments, the full query, the selected fields and a
-/// value pulled from the execution context.
 struct ResolverLogger;
 
 impl ExtensionFactory for ResolverLogger {
@@ -36,8 +30,6 @@ impl ExtensionFactory for ResolverLogger {
     }
 }
 
-/// Per-request instance — `create()` runs once per request, so the query
-/// captured in `parse_query` belongs to the same execution seen by `resolve`.
 struct ResolverLoggerExtension {
     query: Mutex<String>,
 }
@@ -62,8 +54,6 @@ impl Extension for ResolverLoggerExtension {
         info: ResolveInfo<'_>,
         next: NextResolve<'_>,
     ) -> ServerResult<Option<Value>> {
-        // Only top-level resolvers on the Query/Mutation roots; skip
-        // introspection fields (__schema, __type) to keep output readable.
         if matches!(info.parent_type, "Query" | "Mutation") && !info.is_for_introspection {
             let args: Vec<String> = info
                 .field
@@ -88,7 +78,7 @@ impl Extension for ResolverLoggerExtension {
             println!("[extension]   selection fields: {:?}", selections);
             println!(
                 "[extension]   context value (RuntimeConfig): {:?}",
-                ctx.data_opt::<RuntimeConfig>()
+                ctx.data::<RuntimeConfig>()
             );
             println!(
                 "[extension]   context value (AuthClaims): {:?}",
@@ -116,16 +106,11 @@ async fn handler(
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    // Per-request context: pull the JWT authorizer claims off the API Gateway
-    // event and expose them to extensions/resolvers via `ctx.data::<AuthClaims>()`.
-    let claims = event
-        .payload
-        .request_context
-        .authorizer
-        .as_ref()
-        .and_then(|authorizer| authorizer.jwt.as_ref())
-        .map(|jwt| AuthClaims(jwt.claims.clone()))
-        .unwrap_or_default();
+    let claims = AuthClaims(HashMap::from([
+        ("sub".to_string(), "user-sub-id".to_string()),
+        ("email".to_string(), "jhondoe@example.com".to_string()),
+        ("role".to_string(), "admin".to_string()),
+    ]));
 
     let mut data = Data::default();
     data.insert(claims);
