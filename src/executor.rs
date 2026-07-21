@@ -3,14 +3,18 @@ use async_graphql::{Data, Request, Variables};
 
 use crate::error::GraphQLError;
 
-/// Execute a GraphQL query against the built schema and return the JSON result.
 pub async fn execute(
     schema: &Schema,
     query: &str,
     variables: Variables,
+    operation_name: Option<&str>,
     data: Option<Data>,
 ) -> Result<serde_json::Value, GraphQLError> {
-    let mut request = Request::new(query).variables(variables);
+    let mut request = Request::new(query);
+    if let Some(name) = operation_name {
+        request = request.operation_name(name);
+    }
+    request = request.variables(variables);
     if let Some(data) = data {
         request.data = data;
     }

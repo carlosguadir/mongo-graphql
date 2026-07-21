@@ -26,8 +26,9 @@ async fn handler(
         .get("variables")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
+    let operation_name = request["operationName"].as_str();
 
-    let result = executor::execute(&schema, query, variables, None).await?;
+    let result = executor::execute(&schema, query, variables, operation_name, None).await?;
 
     Ok(ApiGatewayV2httpResponse {
         status_code: 200,

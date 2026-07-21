@@ -74,6 +74,7 @@ mod tests {
             r#"query { heroes(where: { alias: { eq: "FilterAlpha" } }) { edges { alias } totalCount } }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -89,6 +90,7 @@ mod tests {
             r#"query { heroes(where: { alias: { ne: "FilterAlpha" } }) { totalCount } }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -99,6 +101,7 @@ mod tests {
             schema,
             r#"query { heroes(where: { alias: { contains: "Beta" } }) { edges { alias } totalCount } }"#,
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -115,6 +118,7 @@ mod tests {
             r#"query { heroes(where: { alias: { startsWith: "Filter" } }) { totalCount } }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -125,6 +129,7 @@ mod tests {
             schema,
             r#"query { heroes(where: { alias: { endsWith: "mma" } }) { totalCount } }"#,
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -137,6 +142,7 @@ mod tests {
             r#"query { heroes(where: { power_level: { eq: 2000 } }) { edges { alias } totalCount } }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -147,6 +153,7 @@ mod tests {
             schema,
             r#"query { heroes(where: { power_level: { gt: 1000 } }) { totalCount } }"#,
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -159,6 +166,7 @@ mod tests {
             r#"query { heroes(where: { power_level: { gte: 2000 } }) { totalCount } }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -169,6 +177,7 @@ mod tests {
             schema,
             r#"query { heroes(where: { power_level: { lt: 2000 } }) { totalCount } }"#,
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -181,6 +190,7 @@ mod tests {
             r#"query { heroes(where: { power_level: { lte: 1000 } }) { totalCount } }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -191,6 +201,7 @@ mod tests {
             schema,
             r#"query { heroes(where: { height: { eq: 1.75 } }) { edges { alias } totalCount } }"#,
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -203,6 +214,7 @@ mod tests {
             r#"query { heroes(where: { height: { gt: 1.80 } }) { totalCount } }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -214,6 +226,7 @@ mod tests {
             r#"query { heroes(where: { active: { eq: true } }) { totalCount } }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -224,6 +237,7 @@ mod tests {
             schema,
             r#"query { heroes(where: { active: { eq: false } }) { totalCount } }"#,
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -238,6 +252,7 @@ mod tests {
                 hero_a.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -254,6 +269,7 @@ mod tests {
             ),
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -264,6 +280,7 @@ mod tests {
             schema,
             r#"query { heroes(where: { active: { eq: true }, protected_city: { eq: "Metropolis" } }) { edges { alias } totalCount } }"#,
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await

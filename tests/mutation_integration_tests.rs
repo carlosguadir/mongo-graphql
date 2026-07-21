@@ -31,6 +31,7 @@ mod tests {
             }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -59,6 +60,7 @@ mod tests {
             }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -79,6 +81,7 @@ mod tests {
                 update_id
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -108,6 +111,7 @@ mod tests {
             }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -128,6 +132,7 @@ mod tests {
                 delete_id
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await

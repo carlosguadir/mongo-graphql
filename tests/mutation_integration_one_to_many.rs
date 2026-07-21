@@ -70,6 +70,7 @@ mod tests {
                 ),
                 async_graphql::Variables::default(),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -116,6 +117,7 @@ mod tests {
                     hero_alias, secret_identity
                 ),
                 async_graphql::Variables::default(),
+                None,
                 None,
             )
             .await
@@ -176,6 +178,7 @@ mod tests {
                 ),
                 async_graphql::Variables::default(),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -231,6 +234,7 @@ mod tests {
                 ),
                 async_graphql::Variables::default(),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -277,6 +281,7 @@ mod tests {
                     hero_alias, secret_identity, team_name
                 ),
                 async_graphql::Variables::default(),
+                None,
                 None,
             )
             .await
@@ -361,6 +366,7 @@ mod tests {
                 ),
                 async_graphql::Variables::default(),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -432,6 +438,7 @@ mod tests {
                 ),
                 async_graphql::Variables::default(),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -478,6 +485,7 @@ mod tests {
                     team_name, hero_oid.to_hex()
                 ),
                 async_graphql::Variables::default(),
+                None,
                 None,
             )
             .await
@@ -532,6 +540,7 @@ mod tests {
                     team_name, hero_alias, hero_identity
                 ),
                 async_graphql::Variables::default(),
+                None,
                 None,
             )
             .await
@@ -608,6 +617,7 @@ mod tests {
                 ),
                 async_graphql::Variables::default(),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -675,6 +685,7 @@ mod tests {
                     hero_oid.to_hex()
                 ),
                 async_graphql::Variables::default(),
+                None,
                 None,
             )
             .await

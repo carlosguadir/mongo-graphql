@@ -52,6 +52,7 @@ mod tests {
             ),
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -101,6 +102,7 @@ mod tests {
                 prefix, prefix
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -183,6 +185,7 @@ mod tests {
                 disconnect_mission_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -272,6 +275,7 @@ mod tests {
             ),
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -342,6 +346,7 @@ mod tests {
             ),
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -391,6 +396,7 @@ mod tests {
                 prefix, prefix
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -473,6 +479,7 @@ mod tests {
                 rev_disconnect_hero_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -561,6 +568,7 @@ mod tests {
                 rev_delete_hero_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await

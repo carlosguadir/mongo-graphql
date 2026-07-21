@@ -87,6 +87,7 @@ mod tests {
                 ),
                 async_graphql::Variables::default(),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -180,6 +181,7 @@ mod tests {
                     power_name, l2_alias, l2_identity, villain_oid.to_hex()
                 ),
                 async_graphql::Variables::default(),
+                None,
                 None,
             )
             .await
