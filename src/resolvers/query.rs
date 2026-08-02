@@ -53,7 +53,31 @@ pub async fn resolve_list(
 
     let raw_filter: mongodb::bson::Document =
         try_deserialize_optional(&ctx.args, "where")?.unwrap_or_default();
-    let base_filter = transform_where_filter(raw_filter, collection_def)?;
+
+    // Resolve nested relation filters (e.g. missions: { some: { code: { eq: "OP-1" } } })
+    // into _id: { $in / $nin } clauses merged into the scalar filter.
+    let definition = ctx
+        .data_opt::<crate::schema::definition::SchemaDefinition>()
+        .ok_or_else(|| GraphQLError::Internal("SchemaDefinition not found in context".into()))?;
+    let nested = crate::resolvers::filter_relation::resolve_nested_filter(
+        definition, db, collection_def, &raw_filter,
+    )
+    .await?;
+    // Strip relation-filter keys (resolved above) so only scalar fields remain.
+    let mut scalar_filter = mongodb::bson::Document::new();
+    for (key, value) in &raw_filter {
+        if !crate::resolvers::filter_relation::is_relation_filter_key(key, collection_def) {
+            scalar_filter.insert(key.clone(), value.clone());
+        }
+    }
+    if let Some(ref ids) = nested.include_ids {
+        scalar_filter.insert("id", doc! { "$in": object_ids_to_bson(ids) });
+    }
+    if !nested.exclude_ids.is_empty() {
+        scalar_filter.insert("id", doc! { "$nin": object_ids_to_bson(&nested.exclude_ids) });
+    }
+
+    let base_filter = transform_where_filter(scalar_filter, collection_def)?;
 
     let filter = if is_backward {
         if let Some(before) = &pagination.before {
@@ -186,7 +210,7 @@ pub(crate) fn transform_id_filter(
 /// Translate a GraphQL `WhereInput` filter into MongoDB query operators.
 /// Converts IdFilter structures: `{"id": {"eq": "hex"}}` → `{"_id": ObjectId("hex")}`
 /// and `{"id": {"ne": "hex"}}` → `{"_id": {"$ne": ObjectId("hex")}}`.
-fn transform_where_filter(
+pub(crate) fn transform_where_filter(
     filter: mongodb::bson::Document,
     collection_def: &CollectionDef,
 ) -> Result<mongodb::bson::Document, GraphQLError> {
@@ -200,6 +224,11 @@ fn transform_where_filter(
                 for (op, val) in filter_doc {
                     // Id field → convert hex string to ObjectId.
                     if is_id_field {
+                        // $in / $nin already carry ObjectId arrays — pass through.
+                        if op == "$in" || op == "$nin" {
+                            result.insert(mongo_key.as_str(), doc! { op.as_str(): val });
+                            continue;
+                        }
                         let hex = val.as_str().ok_or_else(|| {
                             GraphQLError::Internal(format!(
                                 "Id filter value must be a string for operator '{}'",
@@ -270,6 +299,11 @@ fn operator_to_mongo(op: &str) -> String {
         "endsWith" => "$regex".to_string(),
         _ => "$eq".to_string(),
     }
+}
+
+/// Convert a slice of `ObjectId`s into a `Vec<Bson>` for use in `$in` / `$nin` filters.
+fn object_ids_to_bson(ids: &[mongodb::bson::oid::ObjectId]) -> Vec<mongodb::bson::Bson> {
+    ids.iter().map(|id| mongodb::bson::Bson::ObjectId(*id)).collect()
 }
 
 #[cfg(test)]
