@@ -318,7 +318,9 @@ impl<'a> SchemaBuilder<'a> {
                 where_input.field(InputValue::new(field.graphql_name(), TypeRef::named(filter_type)));
         }
 
-        // Register relation-filter input types and add relation fields to WhereInput.
+        // Add relation fields to WhereInput.
+        // OneToMany/OneToOne → direct target WhereInput (single related doc).
+        // ManyToMany → {TargetType}RelationFilter with some/every/none.
         for field in &collection.fields {
             let relation = match &field.field_type {
                 FieldType::Relation(relation) => relation,
@@ -328,35 +330,35 @@ impl<'a> SchemaBuilder<'a> {
                 Some(collection_def) => collection_def,
                 None => continue,
             };
-            let filter_name;
-            (builder, filter_name) =
-                self.ensure_relation_filter(builder, &target_def.type_name());
-            where_input = where_input.field(InputValue::new(
-                field.graphql_name(),
-                TypeRef::named(filter_name.as_str()),
-            ));
+            let field_type = match relation.kind {
+                RelationKind::OneToMany | RelationKind::OneToOne => {
+                    TypeRef::named(format!("{}WhereInput", target_def.type_name()))
+                }
+                RelationKind::ManyToMany => {
+                    let (b, filter_name) =
+                        self.ensure_relation_filter(builder, &target_def.type_name());
+                    builder = b;
+                    TypeRef::named(filter_name)
+                }
+            };
+            where_input =
+                where_input.field(InputValue::new(field.graphql_name(), field_type));
         }
 
-        // Reverse relation filter fields.
+        // Reverse relation filter fields — always OneToMany / OneToOne.
         for (reverse_name, target_coll_name, _) in &reverse_to_many {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
-                let filter_name;
-                (builder, filter_name) =
-                    self.ensure_relation_filter(builder, &target_def.type_name());
                 where_input = where_input.field(InputValue::new(
                     reverse_name,
-                    TypeRef::named(filter_name.as_str()),
+                    TypeRef::named(format!("{}WhereInput", target_def.type_name())),
                 ));
             }
         }
         for (reverse_name, target_coll_name, _) in &reverse_to_one {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
-                let filter_name;
-                (builder, filter_name) =
-                    self.ensure_relation_filter(builder, &target_def.type_name());
                 where_input = where_input.field(InputValue::new(
                     reverse_name,
-                    TypeRef::named(filter_name.as_str()),
+                    TypeRef::named(format!("{}WhereInput", target_def.type_name())),
                 ));
             }
         }
