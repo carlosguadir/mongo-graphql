@@ -64,11 +64,20 @@ pub async fn resolve_list(
     )
     .await?;
     // Strip relation-filter keys (resolved above) so only scalar fields remain.
+    let (rev_to_many, rev_to_one) =
+        crate::resolvers::filter_relation::collect_reverse_relations(collection_def, definition);
+    let is_reverse_key = |key: &str| -> bool {
+        rev_to_many.iter().any(|(n, _, _)| n == key)
+            || rev_to_one.iter().any(|(n, _, _)| n == key)
+    };
     let mut scalar_filter = mongodb::bson::Document::new();
     for (key, value) in &raw_filter {
-        if !crate::resolvers::filter_relation::is_relation_filter_key(key, collection_def) {
-            scalar_filter.insert(key.clone(), value.clone());
+        if crate::resolvers::filter_relation::is_relation_filter_key(key, collection_def)
+            || is_reverse_key(key)
+        {
+            continue;
         }
+        scalar_filter.insert(key.clone(), value.clone());
     }
     if let Some(ref ids) = nested.include_ids {
         scalar_filter.insert("id", doc! { "$in": object_ids_to_bson(ids) });
