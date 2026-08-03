@@ -345,15 +345,19 @@ impl<'a> SchemaBuilder<'a> {
                 where_input.field(InputValue::new(field.graphql_name(), field_type));
         }
 
-        // Reverse relation filter fields — always OneToMany / OneToOne.
+        // Reverse OneToMany (list side) — needs some/every/none wrapper.
         for (reverse_name, target_coll_name, _) in &reverse_to_many {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
+                let filter_name;
+                (builder, filter_name) =
+                    self.ensure_relation_filter(builder, &target_def.type_name());
                 where_input = where_input.field(InputValue::new(
                     reverse_name,
-                    TypeRef::named(format!("{}WhereInput", target_def.type_name())),
+                    TypeRef::named(filter_name.as_str()),
                 ));
             }
         }
+        // Reverse OneToOne — single doc on both sides, direct WhereInput.
         for (reverse_name, target_coll_name, _) in &reverse_to_one {
             if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
                 where_input = where_input.field(InputValue::new(
