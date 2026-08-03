@@ -90,8 +90,9 @@ async fn collect_ids_from_cursor(
     Ok(ids)
 }
 
-/// Merge pre-resolved operator ID sets. `some` resets the include set on first
-/// match; subsequent operators intersect.
+/// Merge pre-resolved operator ID sets. `some` intersects into the include set.
+/// `every` and `none` add to the exclude set (`every` is resolved via negation
+/// before reaching this function).
 #[inline]
 fn merge_operator_ids(
     include: &mut Option<HashSet<ObjectId>>,
@@ -100,15 +101,49 @@ fn merge_operator_ids(
     every_ids: Option<HashSet<ObjectId>>,
     none_ids: Option<HashSet<ObjectId>>,
 ) {
-    let mut fold = |ids: HashSet<ObjectId>| {
+    if let Some(ids) = some_ids {
         *include = Some(match include.take() {
             None => ids,
             Some(existing) => existing.intersection(&ids).cloned().collect(),
         });
-    };
-    if let Some(ids) = some_ids { fold(ids); }
-    if let Some(ids) = every_ids { fold(ids); }
-    if let Some(ids) = none_ids { exclude.extend(ids); }
+    }
+    if let Some(ids) = every_ids {
+        exclude.extend(ids);
+    }
+    if let Some(ids) = none_ids {
+        exclude.extend(ids);
+    }
+}
+
+/// Try to invert a scalar operator for `every` filter negation.
+/// Returns `None` for operators that have no logical inverse (e.g. `contains`).
+fn try_negate_operator(op: &str) -> Option<&str> {
+    match op {
+        "eq" => Some("ne"),
+        "ne" => Some("eq"),
+        "gt" => Some("lte"),
+        "gte" => Some("lt"),
+        "lt" => Some("gte"),
+        "lte" => Some("gt"),
+        "in" => Some("nin"),
+        "nin" => Some("in"),
+        _ => None,
+    }
+}
+
+/// Try to negate a filter document so that `every(f)` becomes `some(NOT f)`.
+/// Returns `None` when any operator in the filter cannot be inverted.
+fn try_negate_filter(filter: &Document) -> Option<Document> {
+    let mut negated = Document::new();
+    for (key, value) in filter {
+        let inner = value.as_document()?;
+        let mut negated_inner = Document::new();
+        for (op, val) in inner {
+            negated_inner.insert(try_negate_operator(op)?, val.clone());
+        }
+        negated.insert(key.clone(), Bson::Document(negated_inner));
+    }
+    Some(negated)
 }
 
 async fn resolve_forward_filter(
@@ -462,41 +497,67 @@ pub async fn resolve_nested_filter(
             Bson::Document(d) => d,
             _ => continue,
         };
-        let ops = RelationFilterOperators::from_document(rel_doc);
+        let mut ops = RelationFilterOperators::from_document(rel_doc);
         if ops.is_empty() {
-            continue;
+            // Direct WhereInput — OneToMany from single side or OneToOne.
+            ops.some = Some(rel_doc.clone());
         }
 
         if let Some(rel_field) = relation_field_type(&key, collection_def) {
-            let with_filter = |f: &Document| RelationFilterOperators {
+            let with_some = |f: &Document| RelationFilterOperators {
                 some: Some(f.clone()), ..Default::default()
             };
-            let some_ids = if let Some(ref f) = ops.some {
-                Some(resolve_single_relation(definition, db, collection_def, &key, rel_field, &with_filter(f), 0).await?)
-            } else { None };
-            let every_ids = if let Some(ref f) = ops.every {
-                Some(resolve_single_relation(definition, db, collection_def, &key, rel_field, &with_filter(f), 0).await?)
-            } else { None };
-            let none_ids = if let Some(ref f) = ops.none {
-                Some(resolve_single_relation(definition, db, collection_def, &key, rel_field, &with_filter(f), 0).await?)
-            } else { None };
+            let mut some_ids = None;
+            let mut every_ids = None;
+            let mut none_ids = None;
+
+            if let Some(ref f) = ops.some {
+                some_ids = Some(resolve_single_relation(definition, db, collection_def, &key, rel_field, &with_some(f), 0).await?);
+            }
+            if let Some(ref f) = ops.every {
+                if let Some(negated) = try_negate_filter(f) {
+                    every_ids = Some(resolve_single_relation(definition, db, collection_def, &key, rel_field, &with_some(&negated), 0).await?);
+                } else {
+                    // Can't negate — fall back to `some` semantics.
+                    let ids = resolve_single_relation(definition, db, collection_def, &key, rel_field, &with_some(f), 0).await?;
+                    some_ids = Some(match some_ids.take() {
+                        None => ids,
+                        Some(existing) => existing.intersection(&ids).cloned().collect(),
+                    });
+                }
+            }
+            if let Some(ref f) = ops.none {
+                none_ids = Some(resolve_single_relation(definition, db, collection_def, &key, rel_field, &with_some(f), 0).await?);
+            }
             merge_operator_ids(&mut include_set, &mut exclude_set, some_ids, every_ids, none_ids);
             continue;
         }
 
         if let Some((target_coll_name, fk_field)) = rev_lookup.get(key.as_str()) {
-            let with_filter = |f: &Document| RelationFilterOperators {
+            let with_some = |f: &Document| RelationFilterOperators {
                 some: Some(f.clone()), ..Default::default()
             };
-            let some_ids = if let Some(ref f) = ops.some {
-                Some(resolve_reverse_filter(definition, db, target_coll_name, fk_field, &with_filter(f), 0).await?)
-            } else { None };
-            let every_ids = if let Some(ref f) = ops.every {
-                Some(resolve_reverse_filter(definition, db, target_coll_name, fk_field, &with_filter(f), 0).await?)
-            } else { None };
-            let none_ids = if let Some(ref f) = ops.none {
-                Some(resolve_reverse_filter(definition, db, target_coll_name, fk_field, &with_filter(f), 0).await?)
-            } else { None };
+            let mut some_ids = None;
+            let mut every_ids = None;
+            let mut none_ids = None;
+
+            if let Some(ref f) = ops.some {
+                some_ids = Some(resolve_reverse_filter(definition, db, target_coll_name, fk_field, &with_some(f), 0).await?);
+            }
+            if let Some(ref f) = ops.every {
+                if let Some(negated) = try_negate_filter(f) {
+                    every_ids = Some(resolve_reverse_filter(definition, db, target_coll_name, fk_field, &with_some(&negated), 0).await?);
+                } else {
+                    let ids = resolve_reverse_filter(definition, db, target_coll_name, fk_field, &with_some(f), 0).await?;
+                    some_ids = Some(match some_ids.take() {
+                        None => ids,
+                        Some(existing) => existing.intersection(&ids).cloned().collect(),
+                    });
+                }
+            }
+            if let Some(ref f) = ops.none {
+                none_ids = Some(resolve_reverse_filter(definition, db, target_coll_name, fk_field, &with_some(f), 0).await?);
+            }
             merge_operator_ids(&mut include_set, &mut exclude_set, some_ids, every_ids, none_ids);
         }
     }
