@@ -318,9 +318,6 @@ impl<'a> SchemaBuilder<'a> {
                 where_input.field(InputValue::new(field.graphql_name(), TypeRef::named(filter_type)));
         }
 
-        // Add relation fields to WhereInput.
-        // OneToMany/OneToOne → direct target WhereInput (single related doc).
-        // ManyToMany → {TargetType}RelationFilter with some/every/none.
         for field in &collection.fields {
             let relation = match &field.field_type {
                 FieldType::Relation(relation) => relation,

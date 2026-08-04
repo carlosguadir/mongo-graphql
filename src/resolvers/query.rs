@@ -310,7 +310,6 @@ fn operator_to_mongo(op: &str) -> String {
     }
 }
 
-/// Convert a slice of `ObjectId`s into a `Vec<Bson>` for use in `$in` / `$nin` filters.
 fn object_ids_to_bson(ids: &[mongodb::bson::oid::ObjectId]) -> Vec<mongodb::bson::Bson> {
     ids.iter().map(|id| mongodb::bson::Bson::ObjectId(*id)).collect()
 }
