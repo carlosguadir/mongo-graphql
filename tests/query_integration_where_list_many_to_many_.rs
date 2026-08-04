@@ -89,8 +89,9 @@ mod tests {
             .await
             .unwrap();
 
-        // ---- test 1: some filter finds matching hero ----
+        // ---- test 1: some filter ----
         {
+            // Matching code → finds hero.
             let query = format!(
                 r#"query {{ heroes(where: {{ missions: {{ some: {{ code: {{ eq: "{}" }} }} }} }}) {{ edges {{ id alias missions {{ code }} }} }} }}"#,
                 alpha_code
@@ -102,11 +103,11 @@ mod tests {
             .unwrap();
             assert!(
                 result.get("errors").is_none(),
-                "test 1 failed: {:?}",
+                "test 1a failed: {:?}",
                 result.get("errors")
             );
             let edges = result["data"]["heroes"]["edges"].as_array().unwrap();
-            assert_eq!(edges.len(), 1, "should return exactly one hero");
+            assert_eq!(edges.len(), 1, "test 1a: should return exactly one hero");
             let hero = &edges[0];
             assert_eq!(hero["id"].as_str().unwrap(), hero_oid.to_hex());
             assert_eq!(hero["alias"].as_str().unwrap(), "FilterHero");
@@ -115,12 +116,26 @@ mod tests {
             let codes: Vec<&str> = missions.iter().map(|m| m["code"].as_str().unwrap()).collect();
             assert!(
                 codes.contains(&alpha_code.as_str()),
-                "missions should include {}; got {:?}", alpha_code, codes
+                "test 1a: missions should include {}; got {:?}", alpha_code, codes
             );
             assert!(
                 codes.contains(&beta_code.as_str()),
-                "missions should include {}; got {:?}", beta_code, codes
+                "test 1a: missions should include {}; got {:?}", beta_code, codes
             );
+
+            // Non-matching code → no hero returned.
+            let query = format!(
+                r#"query {{ heroes(where: {{ missions: {{ some: {{ code: {{ eq: "NONEXISTENT-{}" }} }} }} }}) {{ edges {{ id }} }} }}"#,
+                hero_oid.to_hex()
+            );
+            let result = executor::execute(
+                schema, &query, async_graphql::Variables::default(), None, None,
+            )
+            .await
+            .unwrap();
+            assert!(result.get("errors").is_none(), "test 1b failed: {:?}", result.get("errors"));
+            let edges = result["data"]["heroes"]["edges"].as_array().unwrap();
+            assert_eq!(edges.len(), 0, "test 1b: should return no heroes; got {:?}", edges);
         }
 
         // ---- test 2: every — ALL missions must match ----
