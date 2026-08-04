@@ -12,6 +12,7 @@ mod tests {
     #[tokio::test]
     async fn test_filter_one_to_one() {
         let db = get_db().await;
+        db.drop().await?;
         let schema = get_schema().await;
 
         let hero_oid = ObjectId::new();

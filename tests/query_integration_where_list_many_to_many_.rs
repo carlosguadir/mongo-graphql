@@ -12,6 +12,7 @@ mod tests {
     #[tokio::test]
     async fn test_nested_relation_filters() {
         let db = get_db().await;
+        db.drop().await.unwrap();
         let schema = get_schema().await;
 
         let hero_oid = ObjectId::new();
@@ -177,11 +178,7 @@ mod tests {
             .unwrap();
             assert!(result.get("errors").is_none(), "test 2b failed: {:?}", result.get("errors"));
             let edges = result["data"]["heroes"]["edges"].as_array().unwrap();
-            let ids: Vec<&str> = edges.iter().map(|e| e["id"].as_str().unwrap()).collect();
-            assert!(
-                !ids.contains(&hero_oid.to_hex().as_str()),
-                "test 2b: every-eq should exclude hero; got ids={:?}", ids
-            );
+            assert_eq!(edges.len(), 0, "test 2b: should return no heroes; got {:?}", edges);
         }
 
         // ---- test 3: none — NO mission must match ----
@@ -216,11 +213,7 @@ mod tests {
             .unwrap();
             assert!(result.get("errors").is_none(), "test 3b failed: {:?}", result.get("errors"));
             let edges = result["data"]["heroes"]["edges"].as_array().unwrap();
-            let ids: Vec<&str> = edges.iter().map(|e| e["id"].as_str().unwrap()).collect();
-            assert!(
-                !ids.contains(&hero_oid.to_hex().as_str()),
-                "test 3b: none-existing should exclude hero; got ids={:?}", ids
-            );
+            assert_eq!(edges.len(), 0, "test 3b: should return no heroes; got {:?}", edges);
         }
     }
 }

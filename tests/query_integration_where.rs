@@ -12,10 +12,10 @@ mod tests {
     #[tokio::test]
     async fn test_where_filters() {
         let db = get_db().await;
+        db.drop().await?;
         let schema = get_schema().await;
 
         let hero = db.collection::<mongodb::bson::Document>("hero");
-        let _ = hero.drop().await;
 
         // Seed heroes with varied field values for filter testing.
         let now = mongodb::bson::DateTime::now();
