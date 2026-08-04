@@ -334,7 +334,7 @@ async fn resolve_ids_for_operator(
                 continue;
             }
             let rel_field = match relation_field_type(rel_key, collection_def) {
-                Some(f) => f,
+                Some(field_def) => field_def,
                 None => continue,
             };
 
@@ -556,7 +556,7 @@ pub async fn resolve_nested_filter(
     }
 
     Ok(ResolvedFilter {
-        include_ids: include_set.map(|s| s.into_iter().collect()),
+        include_ids: include_set.map(|set| set.into_iter().collect()),
         exclude_ids: exclude_set.into_iter().collect(),
     })
 }
