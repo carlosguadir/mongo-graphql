@@ -20,6 +20,7 @@ mod tests {
             r#"{ __schema { queryType { name } } }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -50,6 +51,7 @@ mod tests {
             r#"query { hero(where: { id: "000000000000000000000000" }) { id alias } }"#,
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -63,6 +65,7 @@ mod tests {
                 oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await

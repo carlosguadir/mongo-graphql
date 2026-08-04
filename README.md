@@ -154,7 +154,8 @@ cargo install cargo-lambda
 docker run -d --name mongo-dev -p 27017:27017 mongo:latest
 
 # Start local Lambda emulator
-MONGO_URI=mongodb://localhost:27017 DATABASE_NAME=test_graphql_mongodb \
+MONGO_URI=mongodb://localhost:27017 \
+DATABASE_NAME=test_graphql_mongodb \
   cargo lambda watch --bin standard --features lambda
 ```
 

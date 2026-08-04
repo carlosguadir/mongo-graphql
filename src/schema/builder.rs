@@ -317,6 +317,53 @@ impl<'a> SchemaBuilder<'a> {
             where_input =
                 where_input.field(InputValue::new(field.graphql_name(), TypeRef::named(filter_type)));
         }
+
+        for field in &collection.fields {
+            let relation = match &field.field_type {
+                FieldType::Relation(relation) => relation,
+                _ => continue,
+            };
+            let target_def = match collection_map.get(relation.collection.as_str()) {
+                Some(collection_def) => collection_def,
+                None => continue,
+            };
+            let field_type = match relation.kind {
+                RelationKind::OneToMany | RelationKind::OneToOne => {
+                    TypeRef::named(format!("{}WhereInput", target_def.type_name()))
+                }
+                RelationKind::ManyToMany => {
+                    let (b, filter_name) =
+                        self.ensure_relation_filter(builder, &target_def.type_name());
+                    builder = b;
+                    TypeRef::named(filter_name)
+                }
+            };
+            where_input =
+                where_input.field(InputValue::new(field.graphql_name(), field_type));
+        }
+
+        // Reverse OneToMany (list side) — needs some/every/none wrapper.
+        for (reverse_name, target_coll_name, _) in &reverse_to_many {
+            if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
+                let filter_name;
+                (builder, filter_name) =
+                    self.ensure_relation_filter(builder, &target_def.type_name());
+                where_input = where_input.field(InputValue::new(
+                    reverse_name,
+                    TypeRef::named(filter_name.as_str()),
+                ));
+            }
+        }
+        // Reverse OneToOne — single doc on both sides, direct WhereInput.
+        for (reverse_name, target_coll_name, _) in &reverse_to_one {
+            if let Some(target_def) = collection_map.get(target_coll_name.as_str()) {
+                where_input = where_input.field(InputValue::new(
+                    reverse_name,
+                    TypeRef::named(format!("{}WhereInput", target_def.type_name())),
+                ));
+            }
+        }
+
         builder = builder.register(where_input);
 
         let mut sort_input = InputObject::new(format!("{}SortInput", type_name));
@@ -869,6 +916,26 @@ impl<'a> SchemaBuilder<'a> {
         ).items(items));
         self.registered_enums.insert(enum_def.name.clone());
         builder
+    }
+
+    /// Ensure a `{TargetType}RelationFilter` input type is registered (deduplicated),
+    /// returning the builder and the filter type name for use in `WhereInput` fields.
+    fn ensure_relation_filter(
+        &mut self,
+        mut builder: AgSchemaBuilder,
+        target_type: &str,
+    ) -> (AgSchemaBuilder, String) {
+        let filter_name = format!("{}RelationFilter", target_type);
+        if !self.registered_nested_inputs.contains(&filter_name) {
+            let target_where = format!("{}WhereInput", target_type);
+            let rel_filter = InputObject::new(&filter_name)
+                .field(InputValue::new("some", TypeRef::named(&target_where)))
+                .field(InputValue::new("every", TypeRef::named(&target_where)))
+                .field(InputValue::new("none", TypeRef::named(&target_where)));
+            builder = builder.register(rel_filter);
+            self.registered_nested_inputs.insert(filter_name.clone());
+        }
+        (builder, filter_name)
     }
 
     fn register_page_info(&self, builder: AgSchemaBuilder) -> AgSchemaBuilder {

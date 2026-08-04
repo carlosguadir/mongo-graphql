@@ -120,6 +120,7 @@ mod tests {
                 ),
                 async_graphql::Variables::default(),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -220,6 +221,7 @@ mod tests {
                     lair_oid.to_hex()
                 ),
                 async_graphql::Variables::default(),
+                None,
                 None,
             )
             .await
@@ -335,6 +337,7 @@ mod tests {
                     power_oid.to_hex()
                 ),
                 async_graphql::Variables::default(),
+                None,
                 None,
             )
             .await
@@ -476,6 +479,7 @@ mod tests {
                     mission_oid.to_hex()
                 ),
                 async_graphql::Variables::default(),
+                None,
                 None,
             )
             .await

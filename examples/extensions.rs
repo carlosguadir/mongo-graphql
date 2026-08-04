@@ -105,6 +105,7 @@ async fn handler(
         .get("variables")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
+    let operation_name = request["operationName"].as_str();
 
     let claims = AuthClaims(HashMap::from([
         ("sub".to_string(), "user-sub-id".to_string()),
@@ -115,7 +116,7 @@ async fn handler(
     let mut data = Data::default();
     data.insert(claims);
 
-    let result = executor::execute(&schema, query, variables, Some(data)).await?;
+    let result = executor::execute(&schema, query, variables, operation_name, Some(data)).await?;
 
     Ok(ApiGatewayV2httpResponse {
         status_code: 200,

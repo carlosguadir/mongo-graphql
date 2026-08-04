@@ -56,6 +56,7 @@ mod tests {
             ),
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -96,6 +97,7 @@ mod tests {
                 solo_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
@@ -144,6 +146,7 @@ mod tests {
             ),
             async_graphql::Variables::default(),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -181,6 +184,7 @@ mod tests {
                 empty_team_oid.to_hex()
             ),
             async_graphql::Variables::default(),
+            None,
             None,
         )
         .await
