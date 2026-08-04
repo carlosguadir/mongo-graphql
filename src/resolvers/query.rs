@@ -67,8 +67,8 @@ pub async fn resolve_list(
     let (rev_to_many, rev_to_one) =
         crate::resolvers::filter_relation::collect_reverse_relations(collection_def, definition);
     let is_reverse_key = |key: &str| -> bool {
-        rev_to_many.iter().any(|(n, _, _)| n == key)
-            || rev_to_one.iter().any(|(n, _, _)| n == key)
+        rev_to_many.iter().any(|r| r.graphql_name == key)
+            || rev_to_one.iter().any(|r| r.graphql_name == key)
     };
     let mut scalar_filter = mongodb::bson::Document::new();
     for (key, value) in &raw_filter {

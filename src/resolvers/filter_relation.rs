@@ -115,8 +115,6 @@ fn merge_operator_ids(
     }
 }
 
-/// Try to invert a scalar operator for `every` filter negation.
-/// Returns `None` for operators that have no logical inverse (e.g. `contains`).
 fn try_negate_operator(op: &str) -> Option<&str> {
     match op {
         "eq" => Some("ne"),
@@ -131,8 +129,6 @@ fn try_negate_operator(op: &str) -> Option<&str> {
     }
 }
 
-/// Try to negate a filter document so that `every(f)` becomes `some(NOT f)`.
-/// Returns `None` when any operator in the filter cannot be inverted.
 fn try_negate_filter(filter: &Document) -> Option<Document> {
     let mut negated = Document::new();
     for (key, value) in filter {
@@ -297,7 +293,6 @@ async fn resolve_m2m_filter(
     Ok(source_ids)
 }
 
-
 /// Apply a filter document to a collection, returning the set of matching `_id`s.
 /// When `resolve_nested` is true, also handle any relation-filter keys *within*
 /// `filter` by recursing (e.g. `missions: { some: { villains: { some: {...} } } }`).
@@ -317,7 +312,6 @@ async fn resolve_ids_for_operator(
         )));
     }
 
-    // Separate scalar keys from relation keys.
     let mut scalar_filter = Document::new();
     let mut relation_keys: Vec<(String, Document)> = Vec::new();
 
@@ -331,8 +325,6 @@ async fn resolve_ids_for_operator(
         scalar_filter.insert(key.clone(), value.clone());
     }
 
-    // If there are relation-filter keys, resolve them recursively and
-    // add an `_id: { $in }` clause to the scalar filter.
     if !relation_keys.is_empty() {
         let mut nested_id_set: Option<HashSet<ObjectId>> = None;
 
@@ -363,7 +355,6 @@ async fn resolve_ids_for_operator(
         }
     }
 
-    // Execute the scalar query.
     let mongo_filter = if scalar_filter.is_empty() {
         doc! {}
     } else {
@@ -378,8 +369,6 @@ async fn resolve_ids_for_operator(
     Ok(collect_ids_from_cursor(&mut cursor).await?.into_iter().collect())
 }
 
-/// Resolve a single relation field within a filter — delegates to the
-/// appropriate handler based on relation kind.
 async fn resolve_single_relation(
     definition: &SchemaDefinition,
     db: &Database,
@@ -414,16 +403,23 @@ async fn resolve_single_relation(
     }
 }
 
+/// A relation from another collection pointing TO this one.
+#[derive(Debug, Clone)]
+pub struct ReverseRelation {
+    /// GraphQL field name exposed on this collection (e.g. "members").
+    pub graphql_name: String,
+    /// The other collection that holds the FK.
+    pub source_collection: String,
+    /// The FK field on the other collection (e.g. "team_id").
+    pub fk_field: String,
+}
 
 /// Collect reverse relations (OneToMany / OneToOne from other collections)
 /// pointing TO `collection`.
 pub fn collect_reverse_relations(
     collection: &CollectionDef,
     definition: &SchemaDefinition,
-) -> (
-    Vec<(String, String, String)>,
-    Vec<(String, String, String)>,
-) {
+) -> (Vec<ReverseRelation>, Vec<ReverseRelation>) {
     let mut to_many = Vec::new();
     let mut to_one = Vec::new();
 
@@ -438,18 +434,20 @@ pub fn collect_reverse_relations(
             };
             match rel.kind {
                 RelationKind::OneToMany => {
-                    let name = rel
-                        .reverse_name
-                        .clone()
-                        .unwrap_or_else(|| other.plural_name());
-                    to_many.push((name, other.collection.clone(), field.name.clone()));
+                    to_many.push(ReverseRelation {
+                        graphql_name: rel.reverse_name.clone()
+                            .unwrap_or_else(|| other.plural_name()),
+                        source_collection: other.collection.clone(),
+                        fk_field: field.name.clone(),
+                    });
                 }
                 RelationKind::OneToOne => {
-                    let name = rel
-                        .reverse_name
-                        .clone()
-                        .unwrap_or_else(|| other.singular_name());
-                    to_one.push((name, other.collection.clone(), field.name.clone()));
+                    to_one.push(ReverseRelation {
+                        graphql_name: rel.reverse_name.clone()
+                            .unwrap_or_else(|| other.singular_name()),
+                        source_collection: other.collection.clone(),
+                        fk_field: field.name.clone(),
+                    });
                 }
                 _ => {}
             }
@@ -457,7 +455,6 @@ pub fn collect_reverse_relations(
     }
     (to_many, to_one)
 }
-
 
 /// Result of resolving nested relation filters.
 #[derive(Debug)]
@@ -483,9 +480,9 @@ pub async fn resolve_nested_filter(
     let (rev_to_many, rev_to_one) = collect_reverse_relations(collection_def, definition);
     let rev_lookup: HashMap<String, (&str, &str)> = rev_to_many
         .iter()
-        .map(|(name, coll, fk)| (name.clone(), (coll.as_str(), fk.as_str())))
-        .chain(rev_to_one.iter().map(|(name, coll, fk)| {
-            (name.clone(), (coll.as_str(), fk.as_str()))
+        .map(|r| (r.graphql_name.clone(), (r.source_collection.as_str(), r.fk_field.as_str())))
+        .chain(rev_to_one.iter().map(|r| {
+            (r.graphql_name.clone(), (r.source_collection.as_str(), r.fk_field.as_str()))
         }))
         .collect();
 
