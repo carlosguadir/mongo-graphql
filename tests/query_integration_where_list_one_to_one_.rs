@@ -77,5 +77,36 @@ mod tests {
             let edges = result["data"]["heroes"]["edges"].as_array().unwrap();
             assert_eq!(edges.len(), 0, "test 2: should return no heroes; got {:?}", edges);
         }
+
+        // ---- test 3: reverse — matching hero alias → finds villain ----
+        {
+            let query = r#"query { villains(where: { archenemy_of: { alias: { eq: "OneToOneHero" } } }) { edges { id alias } } }"#;
+            let result = executor::execute(
+                schema, query, async_graphql::Variables::default(), None, None,
+            )
+            .await
+            .unwrap();
+
+            assert!(result.get("errors").is_none(), "test 3 failed: {:?}", result.get("errors"));
+
+            let edges = result["data"]["villains"]["edges"].as_array().unwrap();
+            assert_eq!(edges.len(), 1, "test 3: should return exactly one villain");
+            let villain = &edges[0];
+            assert_eq!(villain["id"].as_str().unwrap(), villain_oid.to_hex());
+        }
+
+        // ---- test 4: reverse — non-matching hero alias → empty ----
+        {
+            let query = r#"query { villains(where: { archenemy_of: { alias: { eq: "NonExistentHero" } } }) { edges { id } } }"#;
+            let result = executor::execute(
+                schema, query, async_graphql::Variables::default(), None, None,
+            )
+            .await
+            .unwrap();
+
+            assert!(result.get("errors").is_none(), "test 4 failed: {:?}", result.get("errors"));
+            let edges = result["data"]["villains"]["edges"].as_array().unwrap();
+            assert_eq!(edges.len(), 0, "test 4: should return no villains; got {:?}", edges);
+        }
     }
 }
