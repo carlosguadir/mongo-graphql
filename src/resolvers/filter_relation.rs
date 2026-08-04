@@ -466,10 +466,6 @@ pub struct ResolvedFilter {
     pub exclude_ids: Vec<ObjectId>,
 }
 
-/// Resolve all relation-filter keys in `raw_filter` and return the sets of
-/// source-collection `_id`s that should be included and excluded.
-///
-/// Returns `None` for `include_ids` when no positive relation filter is present.
 pub async fn resolve_nested_filter(
     definition: &SchemaDefinition,
     db: &Database,
