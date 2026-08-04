@@ -12,7 +12,7 @@ mod tests {
     #[tokio::test]
     async fn test_one_to_many_filters() {
         let db = get_db().await;
-        db.drop().await?;
+        db.drop().await.unwrap();
         let schema = get_schema().await;
 
         let hero_oid = ObjectId::new();
@@ -73,6 +73,7 @@ mod tests {
 
         // ---- test 1: forward — filter heroes by team name ----
         {
+            // Matching team → finds hero.
             let query = r#"query { heroes(where: { team: { name: { eq: "JusticeLeague" } } }) { edges { id alias team { id name } } } }"#;
             let result = executor::execute(
                 schema, query, async_graphql::Variables::default(), None, None,
@@ -80,19 +81,27 @@ mod tests {
             .await
             .unwrap();
 
-            assert!(result.get("errors").is_none(), "test 1 failed: {:?}", result.get("errors"));
+            assert!(result.get("errors").is_none(), "test 1a failed: {:?}", result.get("errors"));
 
             let edges = result["data"]["heroes"]["edges"].as_array().unwrap();
-            let ids: Vec<&str> = edges.iter().map(|e| e["id"].as_str().unwrap()).collect();
-            assert!(
-                ids.contains(&hero_oid.to_hex().as_str()),
-                "test 1: hero should be returned; got ids={:?}", ids
-            );
+            assert_eq!(edges.len(), 1, "test 1a: should return exactly one hero");
+            let hero = &edges[0];
+            assert_eq!(hero["id"].as_str().unwrap(), hero_oid.to_hex());
 
-            let hero = edges.iter().find(|e| e["id"].as_str().unwrap() == hero_oid.to_hex()).unwrap();
             let team = &hero["team"];
             assert_eq!(team["name"].as_str().unwrap(), "JusticeLeague");
             assert_eq!(team["id"].as_str().unwrap(), team_oid.to_hex());
+
+            // Non-matching team → no hero returned.
+            let query = r#"query { heroes(where: { team: { name: { eq: "NonExistentTeam" } } }) { edges { id } } }"#;
+            let result = executor::execute(
+                schema, query, async_graphql::Variables::default(), None, None,
+            )
+            .await
+            .unwrap();
+            assert!(result.get("errors").is_none(), "test 1b failed: {:?}", result.get("errors"));
+            let edges = result["data"]["heroes"]["edges"].as_array().unwrap();
+            assert_eq!(edges.len(), 0, "test 1b: should return no heroes; got {:?}", edges);
         }
 
         // ---- test 2: reverse — filter teams by member alias ----
@@ -114,13 +123,13 @@ mod tests {
             .await
             .unwrap();
 
-            assert!(result.get("errors").is_none(), "test 2 failed: {:?}", result.get("errors"));
+            assert!(result.get("errors").is_none(), "test 2a failed: {:?}", result.get("errors"));
 
             let edges = result["data"]["teams"]["edges"].as_array().unwrap();
             let ids: Vec<&str> = edges.iter().map(|e| e["id"].as_str().unwrap()).collect();
             assert!(
                 ids.contains(&team_rev_oid.to_hex().as_str()),
-                "test 2: team should be returned; got ids={:?}", ids
+                "test 2a: team should be returned; got ids={:?}", ids
             );
 
             let team = edges.iter().find(|e| e["id"].as_str().unwrap() == team_rev_oid.to_hex()).unwrap();
@@ -130,8 +139,22 @@ mod tests {
             let aliases: Vec<&str> = members.iter().map(|m| m["alias"].as_str().unwrap()).collect();
             assert!(
                 aliases.contains(&rev_alias.as_str()),
-                "test 2: members should include {}; got {:?}", rev_alias, aliases
+                "test 2a: members should include {}; got {:?}", rev_alias, aliases
             );
+
+            // Non-matching alias → no team returned.
+            let query = format!(
+                r#"query {{ teams(where: {{ members: {{ some: {{ alias: {{ eq: "NonExistent-{}" }} }} }} }}) {{ edges {{ id }} }} }}"#,
+                hero_rev_oid.to_hex()
+            );
+            let result = executor::execute(
+                schema, &query, async_graphql::Variables::default(), None, None,
+            )
+            .await
+            .unwrap();
+            assert!(result.get("errors").is_none(), "test 2b failed: {:?}", result.get("errors"));
+            let edges = result["data"]["teams"]["edges"].as_array().unwrap();
+            assert_eq!(edges.len(), 0, "test 2b: should return no teams; got {:?}", edges);
         }
     }
 }
