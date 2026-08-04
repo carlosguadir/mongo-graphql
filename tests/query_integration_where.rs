@@ -12,7 +12,7 @@ mod tests {
     #[tokio::test]
     async fn test_where_filters() {
         let db = get_db().await;
-        db.drop().await?;
+        db.drop().await.unwrap();
         let schema = get_schema().await;
 
         let hero = db.collection::<mongodb::bson::Document>("hero");
