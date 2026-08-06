@@ -109,7 +109,10 @@ pub async fn resolve_list(
     let mut sort = mongodb::bson::Document::new();
     for (gql_field, direction) in &sort_raw {
         let mongo_name = graphql_to_mongo_field(gql_field, collection_def);
-        let dir = direction.as_i32().unwrap_or(1);
+        let dir = match direction.as_str() {
+            Some("DESC") => -1,
+            _ => direction.as_i32().unwrap_or(1),
+        };
         sort.insert(mongo_name, dir);
     }
 
