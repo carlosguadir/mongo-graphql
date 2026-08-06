@@ -600,7 +600,7 @@ impl<'a> SchemaBuilder<'a> {
         mutation: &str,
     ) -> InputObject {
         for field in &collection.fields {
-            if field.name == "id" || field.name == "_id" {
+            if field.name == "id" || field.name == "_id" || field.excluded_from(mutation) {
                 continue;
             }
             if let FieldType::Relation(relation) = &field.field_type {
@@ -663,7 +663,7 @@ impl<'a> SchemaBuilder<'a> {
         mutation: &str,
     ) -> InputObject {
         for field in &target_coll.fields {
-            if field.name == "id" || field.name == "_id" {
+            if field.name == "id" || field.name == "_id" || field.excluded_from(mutation) {
                 continue;
             }
             if let FieldType::Relation(relation) = &field.field_type {

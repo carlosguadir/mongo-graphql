@@ -93,6 +93,7 @@ Generated queries and mutations per collection:
 | `graphql_name` | Override the GraphQL field name (default: same as `name`) |
 | `enum` | Inline enum definition `{ "name": "...", "values": [...] }` |
 | `description` | Documentation string |
+| `exclude_from` | List of operation names to exclude this field from (e.g. `["Create", "Update"]`). The field remains in output types (Get/List). Case-insensitive. |
 
 ### Relation kinds
 

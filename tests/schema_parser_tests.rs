@@ -351,3 +351,104 @@ fn test_partial_directives() {
     assert!(hero.directives.update.is_empty());
     assert!(hero.directives.delete.is_empty());
 }
+
+#[test]
+fn test_exclude_from_create_and_update() {
+    let json = r#"{
+        "collections": [
+            {
+                "collection": "hero",
+                "fields": [
+                    { "name": "id", "type": "ID", "required": true },
+                    { "name": "alias", "type": "String", "required": true },
+                    { "name": "updated_at", "type": "DateTime", "exclude_from": ["Create", "Update"] }
+                ]
+            }
+        ]
+    }"#;
+    let schema = SchemaParser::from_str(json).unwrap();
+    let updated_at = &schema.collections[0].fields[2];
+    let excluded = updated_at.exclude_from.as_ref().unwrap();
+    assert_eq!(excluded, &vec!["Create".to_string(), "Update".to_string()]);
+    assert!(updated_at.excluded_from("Create"));
+    assert!(updated_at.excluded_from("Update"));
+    assert!(!updated_at.excluded_from("Get"));
+    assert!(!updated_at.excluded_from("List"));
+}
+
+#[test]
+fn test_exclude_from_per_mutation_granularity() {
+    let json = r#"{
+        "collections": [
+            {
+                "collection": "hero",
+                "fields": [
+                    { "name": "id", "type": "ID", "required": true },
+                    { "name": "alias", "type": "String", "required": true },
+                    { "name": "immutable_field", "type": "String", "exclude_from": ["Update"] }
+                ]
+            }
+        ]
+    }"#;
+    let schema = SchemaParser::from_str(json).unwrap();
+    let field = &schema.collections[0].fields[2];
+    assert!(field.excluded_from("Update"));
+    assert!(!field.excluded_from("Create"));
+    assert!(!field.excluded_from("Get"));
+}
+
+#[test]
+fn test_exclude_from_defaults_to_none() {
+    let json = r#"{
+        "collections": [
+            {
+                "collection": "hero",
+                "fields": [
+                    { "name": "id", "type": "ID", "required": true },
+                    { "name": "alias", "type": "String", "required": true }
+                ]
+            }
+        ]
+    }"#;
+    let schema = SchemaParser::from_str(json).unwrap();
+    let alias = &schema.collections[0].fields[1];
+    assert!(alias.exclude_from.is_none());
+    assert!(!alias.excluded_from("Create"));
+    assert!(!alias.excluded_from("Update"));
+}
+
+#[test]
+fn test_exclude_from_case_insensitive() {
+    let json = r#"{
+        "collections": [
+            {
+                "collection": "hero",
+                "fields": [
+                    { "name": "id", "type": "ID", "required": true },
+                    { "name": "alias", "type": "String", "required": true },
+                    { "name": "updated_at", "type": "DateTime", "exclude_from": ["create", "update"] }
+                ]
+            }
+        ]
+    }"#;
+    let schema = SchemaParser::from_str(json).unwrap();
+    let field = &schema.collections[0].fields[2];
+    assert!(field.excluded_from("Create"));
+    assert!(field.excluded_from("UPDATE"));
+    assert!(field.excluded_from("update"));
+}
+
+#[test]
+fn test_unknown_field_key_still_rejected() {
+    let json = r#"{
+        "collections": [
+            {
+                "collection": "hero",
+                "fields": [
+                    { "name": "id", "type": "ID", "required": true, "requred": true }
+                ]
+            }
+        ]
+    }"#;
+    assert!(SchemaParser::from_str(json).is_err());
+}
