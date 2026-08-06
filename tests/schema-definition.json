@@ -84,7 +84,8 @@
         { "name": "security_level", "type": "Int" },
         { "name": "facilities", "type": ["String"] },
         { "name": "specs", "type": "Json" },
-        { "name": "created_at", "type": "DateTime", "required": true }
+        { "name": "created_at", "type": "DateTime", "required": true },
+        { "name": "updatedAt", "type": "DateTime", "exclude_from": ["Create", "Update"] }
       ]
     },
     {

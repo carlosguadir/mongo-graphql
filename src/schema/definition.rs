@@ -108,6 +108,12 @@ pub struct FieldDef {
 
     #[serde(default)]
     pub description: Option<String>,
+
+    /// Operation names this field is excluded from (e.g. ["Create", "Update"]).
+    /// Case-insensitive comparison. The field remains in output types unless
+    /// explicitly excluded from "Get" / "List".
+    #[serde(default)]
+    pub exclude_from: Option<Vec<String>>,
 }
 
 impl FieldDef {
@@ -115,6 +121,12 @@ impl FieldDef {
         self.graphql_name
             .clone()
             .unwrap_or_else(|| self.name.clone())
+    }
+
+    pub fn excluded_from(&self, operation: &str) -> bool {
+        self.exclude_from
+            .as_deref()
+            .is_some_and(|list| list.iter().any(|m| m.eq_ignore_ascii_case(operation)))
     }
 }
 
