@@ -999,7 +999,11 @@ impl<'a> SchemaBuilder<'a> {
                 .field(InputValue::new("gt", TypeRef::named("DateTime")))
                 .field(InputValue::new("gte", TypeRef::named("DateTime")))
                 .field(InputValue::new("lt", TypeRef::named("DateTime")))
-                .field(InputValue::new("lte", TypeRef::named("DateTime"))))
+                .field(InputValue::new("lte", TypeRef::named("DateTime")))
+                .field(InputValue::new("between", TypeRef::named("DateTimeRangeInput"))))
+            .register(InputObject::new("DateTimeRangeInput")
+                .field(InputValue::new("from", TypeRef::named("DateTime")))
+                .field(InputValue::new("to", TypeRef::named("DateTime"))))
     }
 }
 

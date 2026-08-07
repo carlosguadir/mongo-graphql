@@ -266,6 +266,20 @@ pub(crate) fn transform_where_filter(
                         continue;
                     }
 
+                    if op == "between" {
+                        let empty_doc = mongodb::bson::Document::new();
+                        let range = val.as_document().unwrap_or(&empty_doc);
+                        let mut range_doc = mongodb::bson::Document::new();
+                        if let Some(from) = range.get("from") {
+                            range_doc.insert("$gte", from.clone());
+                        }
+                        if let Some(to) = range.get("to") {
+                            range_doc.insert("$lte", to.clone());
+                        }
+                        result.insert(mongo_key.as_str(), range_doc);
+                        continue;
+                    }
+
                     let mongo_op = operator_to_mongo(&op);
                     if mongo_op == "$eq" {
                         result.insert(mongo_key.as_str(), val);
