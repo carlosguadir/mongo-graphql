@@ -19,6 +19,8 @@ mod tests {
 
         // Seed heroes with varied field values for filter testing.
         let now = mongodb::bson::DateTime::now();
+        let now_ms = now.timestamp_millis();
+        let day_ms: i64 = 86_400_000;
         let hero_a = ObjectId::new();
         let hero_b = ObjectId::new();
         let hero_c = ObjectId::new();
@@ -30,7 +32,7 @@ mod tests {
             "power_level": 1000,
             "height": 1.75,
             "active": true,
-            "joined_at": now,
+            "joined_at": mongodb::bson::DateTime::from_millis(now_ms - 3 * day_ms),
             "created_at": now,
             "bio": "Fast and strong",
             "protected_city": "Metropolis",
@@ -45,7 +47,7 @@ mod tests {
             "power_level": 2000,
             "height": 1.82,
             "active": false,
-            "joined_at": now,
+            "joined_at": mongodb::bson::DateTime::from_millis(now_ms - 1 * day_ms),
             "created_at": now,
             "bio": "Stealth expert",
             "protected_city": "Gotham",
@@ -60,7 +62,7 @@ mod tests {
             "power_level": 3000,
             "height": 1.90,
             "active": true,
-            "joined_at": now,
+            "joined_at": mongodb::bson::DateTime::from_millis(now_ms - 5 * day_ms),
             "created_at": now,
             "bio": "Tactical genius",
             "protected_city": "Metropolis",
@@ -287,5 +289,35 @@ mod tests {
         .unwrap();
         if let Some(errors) = result.get("errors") { panic!("multi: {:?}", errors); }
         assert_eq!(result["data"]["heroes"]["totalCount"].as_i64().unwrap(), 2);
+
+        // ---- DateTime range (gte + lte) ----
+        // hero_a at 3 days ago, hero_b at 1 day ago, hero_c at 5 days ago.
+        // gte 4 days ago + lte 2 days ago → captures hero_a only.
+        let from_ms = now_ms - 4 * day_ms;
+        let to_ms = now_ms - 2 * day_ms;
+        let from_iso = chrono::DateTime::from_timestamp_millis(from_ms)
+            .unwrap()
+            .to_rfc3339();
+        let to_iso = chrono::DateTime::from_timestamp_millis(to_ms)
+            .unwrap()
+            .to_rfc3339();
+        let result = executor::execute(
+            schema,
+            &format!(
+                r#"query {{ heroes(where: {{ joined_at: {{ gte: "{}", lte: "{}" }} }}) {{ edges {{ alias }} totalCount }} }}"#,
+                from_iso, to_iso,
+            ),
+            async_graphql::Variables::default(),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        if let Some(errors) = result.get("errors") { panic!("range: {:?}", errors); }
+        assert_eq!(result["data"]["heroes"]["totalCount"].as_i64().unwrap(), 1);
+        assert_eq!(
+            result["data"]["heroes"]["edges"].as_array().unwrap()[0]["alias"].as_str().unwrap(),
+            "FilterAlpha"
+        );
     }
 }

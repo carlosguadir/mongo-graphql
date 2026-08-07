@@ -43,9 +43,9 @@ pub fn bson_to_json(bson: &Bson) -> serde_json::Value {
     match bson {
         Bson::ObjectId(oid) => serde_json::Value::String(oid.to_hex()),
         Bson::String(s) => serde_json::Value::String(s.clone()),
-        Bson::Int32(i) => serde_json::Value::Number((*i).into()),
-        Bson::Int64(i) => serde_json::Value::Number((*i).into()),
-        Bson::Double(f) => serde_json::Number::from_f64(*f)
+        Bson::Int32(n) => serde_json::Value::Number((*n).into()),
+        Bson::Int64(n) => serde_json::Value::Number((*n).into()),
+        Bson::Double(n) => serde_json::Number::from_f64(*n)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
         Bson::Boolean(b) => serde_json::Value::Bool(*b),
@@ -87,11 +87,20 @@ pub fn input_doc_to_mongo(doc: mongodb::bson::Document, collection_def: &Collect
             .unwrap_or_else(|| key.clone());
 
         let mapped_value = match field_def {
-            Some(f) if matches!(f.field_type, FieldType::Relation(_)) => {
+            Some(field_def) if matches!(field_def.field_type, FieldType::Relation(_)) => {
                 // Relation fields are extracted and processed by the mutation resolver
                 // (process_nested_one_input / process_nested_many_input).
                 // They no longer arrive here as plain hex strings.
                 continue;
+            }
+            Some(field_def) if matches!(field_def.field_type, FieldType::DateTime) => {
+                match value.as_str() {
+                    Some(s) => match mongodb::bson::DateTime::parse_rfc3339_str(s) {
+                        Ok(dt) => mongodb::bson::Bson::DateTime(dt),
+                        Err(_) => value,
+                    },
+                    None => value,
+                }
             }
             _ => value,
         };
