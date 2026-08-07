@@ -93,7 +93,7 @@ pub fn input_doc_to_mongo(doc: mongodb::bson::Document, collection_def: &Collect
                 // They no longer arrive here as plain hex strings.
                 continue;
             }
-            Some(f) if matches!(f.field_type, FieldType::DateTime) => {
+            Some(field_def) if matches!(field_def.field_type, FieldType::DateTime) => {
                 match value.as_str() {
                     Some(s) => match mongodb::bson::DateTime::parse_rfc3339_str(s) {
                         Ok(dt) => mongodb::bson::Bson::DateTime(dt),
