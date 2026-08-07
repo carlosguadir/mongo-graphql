@@ -1,6 +1,6 @@
 [package]
 name = "mongo-graphql"
-version = "0.0.5"
+version = "0.0.52"
 edition = "2024"
 rust-version = "1.97"
 description = "Dynamic GraphQL schema generation from MongoDB collections, optimized for AWS Lambda"
