@@ -43,9 +43,9 @@ pub fn bson_to_json(bson: &Bson) -> serde_json::Value {
     match bson {
         Bson::ObjectId(oid) => serde_json::Value::String(oid.to_hex()),
         Bson::String(s) => serde_json::Value::String(s.clone()),
-        Bson::Int32(i) => serde_json::Value::Number((*i).into()),
-        Bson::Int64(i) => serde_json::Value::Number((*i).into()),
-        Bson::Double(f) => serde_json::Number::from_f64(*f)
+        Bson::Int32(n) => serde_json::Value::Number((*n).into()),
+        Bson::Int64(n) => serde_json::Value::Number((*n).into()),
+        Bson::Double(n) => serde_json::Number::from_f64(*n)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
         Bson::Boolean(b) => serde_json::Value::Bool(*b),
