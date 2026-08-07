@@ -230,6 +230,7 @@ pub(crate) fn transform_where_filter(
     for (key, value) in filter {
         let mongo_key = graphql_to_mongo_field(&key, collection_def);
         let is_id_field = mongo_key == "_id";
+        let is_datetime = is_datetime_field(&key, collection_def);
 
         match value {
             mongodb::bson::Bson::Document(filter_doc) => {
@@ -271,15 +272,16 @@ pub(crate) fn transform_where_filter(
                         let range = val.as_document().unwrap_or(&empty_doc);
                         let mut range_doc = mongodb::bson::Document::new();
                         if let Some(from) = range.get("from") {
-                            range_doc.insert("$gte", from.clone());
+                            range_doc.insert("$gte", maybe_datetime(from, is_datetime));
                         }
                         if let Some(to) = range.get("to") {
-                            range_doc.insert("$lte", to.clone());
+                            range_doc.insert("$lte", maybe_datetime(to, is_datetime));
                         }
                         result.insert(mongo_key.as_str(), range_doc);
                         continue;
                     }
 
+                    let val = maybe_datetime(&val, is_datetime);
                     let mongo_op = operator_to_mongo(&op);
                     if mongo_op == "$eq" {
                         result.insert(mongo_key.as_str(), val);
@@ -308,6 +310,26 @@ fn graphql_to_mongo_field(gql_field: &str, collection_def: &CollectionDef) -> St
         .find(|field| field.graphql_name() == gql_field)
         .map(|field| field.name.clone())
         .unwrap_or_else(|| gql_field.to_string())
+}
+
+fn is_datetime_field(gql_field: &str, collection_def: &CollectionDef) -> bool {
+    collection_def
+        .fields
+        .iter()
+        .any(|field| field.graphql_name() == gql_field && matches!(field.field_type, crate::schema::definition::FieldType::DateTime))
+}
+
+fn maybe_datetime(val: &mongodb::bson::Bson, is_datetime: bool) -> mongodb::bson::Bson {
+    if !is_datetime {
+        return val.clone();
+    }
+    match val.as_str() {
+        Some(s) => match mongodb::bson::DateTime::parse_rfc3339_str(s) {
+            Ok(dt) => mongodb::bson::Bson::DateTime(dt),
+            Err(_) => val.clone(),
+        },
+        None => val.clone(),
+    }
 }
 
 /// Map a GraphQL filter operator name to its MongoDB equivalent.
