@@ -290,9 +290,9 @@ mod tests {
         if let Some(errors) = result.get("errors") { panic!("multi: {:?}", errors); }
         assert_eq!(result["data"]["heroes"]["totalCount"].as_i64().unwrap(), 2);
 
-        // ---- DateTime between (via variables) ----
+        // ---- DateTime range (gte + lte) ----
         // hero_a at 3 days ago, hero_b at 1 day ago, hero_c at 5 days ago.
-        // between 4 days ago and 2 days ago → captures hero_a only.
+        // gte 4 days ago + lte 2 days ago → captures hero_a only.
         let from_ms = now_ms - 4 * day_ms;
         let to_ms = now_ms - 2 * day_ms;
         let from_iso = chrono::DateTime::from_timestamp_millis(from_ms)
@@ -301,28 +301,19 @@ mod tests {
         let to_iso = chrono::DateTime::from_timestamp_millis(to_ms)
             .unwrap()
             .to_rfc3339();
-        let variables = async_graphql::Variables::from_json(
-            serde_json::json!({
-                "where": {
-                    "joined_at": {
-                        "between": {
-                            "from": from_iso,
-                            "to": to_iso,
-                        }
-                    }
-                }
-            }),
-        );
         let result = executor::execute(
             schema,
-            "query($where: HeroWhereInput) { heroes(where: $where) { edges { alias } totalCount } }",
-            variables,
+            &format!(
+                r#"query {{ heroes(where: {{ joined_at: {{ gte: "{}", lte: "{}" }} }}) {{ edges {{ alias }} totalCount }} }}"#,
+                from_iso, to_iso,
+            ),
+            async_graphql::Variables::default(),
             None,
             None,
         )
         .await
         .unwrap();
-        if let Some(errors) = result.get("errors") { panic!("between: {:?}", errors); }
+        if let Some(errors) = result.get("errors") { panic!("range: {:?}", errors); }
         assert_eq!(result["data"]["heroes"]["totalCount"].as_i64().unwrap(), 1);
         assert_eq!(
             result["data"]["heroes"]["edges"].as_array().unwrap()[0]["alias"].as_str().unwrap(),
