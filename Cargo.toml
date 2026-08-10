@@ -1,6 +1,6 @@
 [package]
 name = "mongo-graphql"
-version = "0.0.53"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
 description = "Dynamic GraphQL schema generation from MongoDB collections, optimized for AWS Lambda"
@@ -29,12 +29,13 @@ required-features = ["lambda"]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
-tokio = { version = "1.52", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.52", features = ["rt", "rt-multi-thread", "macros", "sync"] }
 async-graphql = { version = "7.2", features = ["dynamic-schema"] }
 mongodb = "3.8"
 chrono = "0.4"
 base64 = "0.22"
 futures = "0.3"
+async-trait = "0.1.92"
 
 aws_lambda_events = { version = "0.15", optional = true }
 lambda_runtime = { version = "0.13", optional = true }
