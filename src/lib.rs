@@ -1,3 +1,4 @@
+pub mod dataloader;
 pub mod error;
 pub mod executor;
 pub mod helpers;
