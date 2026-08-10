@@ -8,6 +8,7 @@ use async_graphql::dynamic::{
 use async_graphql::extensions::{Extension, ExtensionFactory};
 use mongodb::{Client, Database};
 
+use crate::dataloader::DataLoaderExtensionFactory;
 use crate::error::GraphQLError;
 use crate::helpers::serialization::json_to_field_value;
 use crate::resolvers::{mutation, query};
@@ -17,6 +18,10 @@ use crate::types::scalars;
 #[derive(Debug, Clone)]
 pub struct RuntimeConfig {
     pub max_page_size: usize,
+    /// When true, a per-request [`DataLoader`](crate::dataloader::DataLoader) is
+    /// auto-injected via an extension. Disable if you handle batching yourself or
+    /// don't need it — relation resolvers fall back to direct per-parent queries.
+    pub enable_dataloader: bool,
 }
 
 enum Operation {
@@ -66,6 +71,14 @@ impl<'a> SchemaBuilder<'a> {
         let mut builder = Schema::build("Query", Some("Mutation"), None);
         for extension in extensions.into_iter().flatten() {
             builder = builder.extension(BoxedExtensionFactory(extension));
+        }
+        if self.config.enable_dataloader {
+            builder = builder.extension(BoxedExtensionFactory(Box::new(
+                DataLoaderExtensionFactory {
+                    db: db.clone(),
+                    definition: self.definition.clone(),
+                },
+            )));
         }
         builder = scalars::register_all(builder);
         builder = self.register_page_info(builder);
@@ -176,13 +189,15 @@ impl<'a> SchemaBuilder<'a> {
                         field.graphql_name(),
                         TypeRef::named(target_type),
                         move |ctx| {
+                            let loader: Option<crate::dataloader::DataLoader> =
+                                ctx.data_opt::<crate::dataloader::DataLoader>().cloned();
                             let db = db_for_rel.clone();
                             let target_coll = target_coll_name.clone();
                             let target_def = target_def_for_closure.clone();
                             let fk_name = fk_mongo_name.clone();
                             FieldFuture::new(async move {
                                 let result = crate::resolvers::query_relation::resolve_forward_to_one(
-                                    &ctx, &db, &target_coll, &target_def, &fk_name,
+                                    &ctx, loader.as_ref(), &db, &target_coll, &target_def, &fk_name,
                                 )
                                 .await;
                                 resolve_to_field_value(result)
@@ -200,12 +215,14 @@ impl<'a> SchemaBuilder<'a> {
                         field.graphql_name(),
                         TypeRef::named_nn_list(&target_type),
                         move |ctx| {
+                            let loader: Option<crate::dataloader::DataLoader> =
+                                ctx.data_opt::<crate::dataloader::DataLoader>().cloned();
                             let db = db_for_rel.clone();
                             let junction = junction.clone();
                             let target_def = target_def_for_closure.clone();
                             FieldFuture::new(async move {
                                 let result = crate::resolvers::query_relation::resolve_forward_many_to_many(
-                                    &ctx, &db, &junction, &target_def,
+                                    &ctx, loader.as_ref(), &db, &junction, &target_def,
                                 )
                                 .await;
                                 resolve_to_field_value(result)
@@ -229,12 +246,14 @@ impl<'a> SchemaBuilder<'a> {
                 reverse_name.clone(),
                 TypeRef::named_nn_list(target_type),
                 move |ctx| {
+                    let loader: Option<crate::dataloader::DataLoader> =
+                        ctx.data_opt::<crate::dataloader::DataLoader>().cloned();
                     let db = db_for_rel.clone();
                     let target_def = target_def_for_closure.clone();
                     let fk_field = fk_field_for_closure.clone();
                     FieldFuture::new(async move {
                         let result = crate::resolvers::query_relation::resolve_reverse_to_many(
-                            &ctx, &db, &target_def, &fk_field,
+                            &ctx, loader.as_ref(), &db, &target_def, &fk_field,
                         )
                         .await;
                         resolve_to_field_value(result)
@@ -256,12 +275,14 @@ impl<'a> SchemaBuilder<'a> {
                 reverse_name.clone(),
                 TypeRef::named(target_type),
                 move |ctx| {
+                    let loader: Option<crate::dataloader::DataLoader> =
+                        ctx.data_opt::<crate::dataloader::DataLoader>().cloned();
                     let db = db_for_rel.clone();
                     let target_def = target_def_for_closure.clone();
                     let fk_field = fk_field_for_closure.clone();
                     FieldFuture::new(async move {
                         let result = crate::resolvers::query_relation::resolve_reverse_to_one(
-                            &ctx, &db, &target_def, &fk_field,
+                            &ctx, loader.as_ref(), &db, &target_def, &fk_field,
                         )
                         .await;
                         resolve_to_field_value(result)
