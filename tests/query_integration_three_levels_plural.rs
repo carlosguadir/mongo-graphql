@@ -26,7 +26,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("hero")
                 .insert_one(doc! {
                     "_id": hero_oid,
-                    "id": hero_oid,
                     "alias": &hero_alias,
                     "secret_identity": "Plural Chain Hero",
                     "power_level": 900,
@@ -42,7 +41,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("mission")
                 .insert_one(doc! {
                     "_id": mission_oid,
-                    "id": mission_oid,
                     "code": &mission_code,
                     "description": "Plural three-level mission",
                     "date": mongodb::bson::DateTime::now(),
@@ -58,7 +56,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("villain")
                 .insert_one(doc! {
                     "_id": villain_oid,
-                    "id": villain_oid,
                     "alias": &villain_alias,
                     "secret_identity": "Plural Mission Villain",
                     "threat_level": 85,
@@ -89,7 +86,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("power")
                 .insert_one(doc! {
                     "_id": power_oid,
-                    "id": power_oid,
                     "name": &power_name,
                     "type": "elemental",
                     "level": 5,
@@ -165,7 +161,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("hero")
                 .insert_one(doc! {
                     "_id": hero_oid,
-                    "id": hero_oid,
                     "alias": &hero_alias,
                     "secret_identity": "Plural Lair Hero",
                     "power_level": 600,
@@ -180,7 +175,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("secret_lair")
                 .insert_one(doc! {
                     "_id": lair_oid,
-                    "id": lair_oid,
                     "name": &lair_name,
                     "location": "Plural underground base",
                     "is_underground": true,
@@ -194,7 +188,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("power")
                 .insert_one(doc! {
                     "_id": power_oid,
-                    "id": power_oid,
                     "name": &power_name,
                     "type": "psychic",
                     "level": 3,
@@ -258,7 +251,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("power")
                 .insert_one(doc! {
                     "_id": power_oid,
-                    "id": power_oid,
                     "name": &power_name,
                     "type": "cosmic",
                     "level": 9,
@@ -272,7 +264,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("villain")
                 .insert_one(doc! {
                     "_id": villain_oid,
-                    "id": villain_oid,
                     "alias": &villain_alias,
                     "secret_identity": "Plural Archenemy Villain",
                     "threat_level": 95,
@@ -287,7 +278,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("hero")
                 .insert_one(doc! {
                     "_id": hero_oid,
-                    "id": hero_oid,
                     "alias": &hero_alias,
                     "secret_identity": "Plural Powered Hero",
                     "power_level": 750,
@@ -312,7 +302,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("mission")
                 .insert_one(doc! {
                     "_id": mission_oid,
-                    "id": mission_oid,
                     "code": &mission_code,
                     "description": "Plural power chain mission",
                     "date": mongodb::bson::DateTime::now(),
@@ -384,7 +373,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("mission")
                 .insert_one(doc! {
                     "_id": mission_oid,
-                    "id": mission_oid,
                     "code": &mission_code,
                     "description": "Plural dual chain mission",
                     "date": mongodb::bson::DateTime::now(),
@@ -400,7 +388,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("team")
                 .insert_one(doc! {
                     "_id": team_oid,
-                    "id": team_oid,
                     "name": &team_name,
                     "founded_at": mongodb::bson::DateTime::now(),
                     "is_official": true,
@@ -414,7 +401,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("hero")
                 .insert_one(doc! {
                     "_id": mission_hero_oid,
-                    "id": mission_hero_oid,
                     "alias": &mission_hero_alias,
                     "secret_identity": "Plural Mission Member",
                     "power_level": 500,
@@ -439,7 +425,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("villain")
                 .insert_one(doc! {
                     "_id": villain_oid,
-                    "id": villain_oid,
                     "alias": &villain_alias,
                     "secret_identity": "Plural Mission Villain Dual",
                     "threat_level": 80,
@@ -462,7 +447,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("hero")
                 .insert_one(doc! {
                     "_id": nemesis_oid,
-                    "id": nemesis_oid,
                     "alias": &nemesis_alias,
                     "secret_identity": "Plural Nemesis of Villain",
                     "power_level": 850,

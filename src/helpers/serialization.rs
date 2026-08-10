@@ -24,13 +24,13 @@ pub fn document_to_graphql_value(
         }
 
         let gql_name = field_def.graphql_name();
-        match doc.get(&field_def.name) {
+        // The `id` field is projected from MongoDB's `_id` — no separate
+        // `id` field is stored in documents.
+        let mongo_name = if field_def.name == "id" { "_id" } else { field_def.name.as_str() };
+        match doc.get(mongo_name) {
             Some(bson) => {
                 map.insert(gql_name, bson_to_json(bson));
             }
-            // Omit missing fields rather than inserting null — async-graphql will
-            // enforce the non-null contract and surface a field error if a required
-            // field is absent from the MongoDB document.
             None => {}
         }
     }

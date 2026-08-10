@@ -34,7 +34,6 @@ mod tests {
         let oid = ObjectId::new();
         hero.insert_one(doc! {
             "_id": oid,
-            "id": oid,
             "alias": "IntTestGetHero",
             "secret_identity": "John Doe",
             "power_level": 9000,

@@ -40,7 +40,7 @@ mod tests {
 
         let team_id = ObjectId::new();
         team_coll.insert_one(doc! {
-            "_id": team_id, "id": team_id,
+            "_id": team_id,
             "name": "DL-Batch-Team",
             "founded_at": &now,
             "is_official": true,
@@ -52,7 +52,7 @@ mod tests {
             let hero_id = ObjectId::new();
             let alias = format!("{}-H{}", prefix, i);
             hero_coll.insert_one(doc! {
-                "_id": hero_id, "id": hero_id,
+                "_id": hero_id,
                 "alias": &alias,
                 "secret_identity": "DL-Test",
                 "power_level": 500,
@@ -64,7 +64,7 @@ mod tests {
 
             let mission_id = ObjectId::new();
             mission_coll.insert_one(doc! {
-                "_id": mission_id, "id": mission_id,
+                "_id": mission_id,
                 "code": format!("{}-M{}", prefix, i),
                 "description": "DL test mission",
                 "date": &now,

@@ -289,7 +289,7 @@ fn parse_keys(keys: &[String]) -> Vec<ObjectId> {
 }
 
 fn build_projection(fields: &[String], extra: &[&str]) -> Document {
-    let mut doc = doc! { "_id": 1, "id": 1 };
+    let mut doc = doc! { "_id": 1 };
     for &field in extra {
         doc.insert(field, 1);
     }
@@ -485,7 +485,7 @@ pub fn selection_projection_fields(
     ctx: &ResolverContext<'_>,
     collection_def: &crate::schema::definition::CollectionDef,
 ) -> Vec<String> {
-    let mut fields: Vec<String> = vec!["_id".into(), "id".into()];
+    let mut fields: Vec<String> = vec!["_id".into()];
     for selection in ctx.field().selection_set() {
         let gql_name = selection.name();
         let Some(field_def) = collection_def

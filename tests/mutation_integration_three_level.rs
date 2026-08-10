@@ -144,7 +144,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("villain")
                 .insert_one(mongodb::bson::doc! {
                     "_id": villain_oid,
-                    "id": villain_oid,
                     "alias": &villain_alias,
                     "secret_identity": "Pre-existing Nemesis",
                     "threat_level": 95,

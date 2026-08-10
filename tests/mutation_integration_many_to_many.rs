@@ -23,7 +23,6 @@ mod tests {
         mission_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": mission_oid,
-                "id": mission_oid,
                 "code": &mission_code,
                 "description": "Test mission for ManyToMany connect",
                 "date": mongodb::bson::DateTime::now(),
@@ -138,7 +137,6 @@ mod tests {
         mission_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": disconnect_mission_oid,
-                "id": disconnect_mission_oid,
                 "code": format!("{}_Disconnect", prefix),
                 "description": "Mission to disconnect",
                 "date": mongodb::bson::DateTime::now(),
@@ -154,7 +152,6 @@ mod tests {
         hero_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": disconnect_hero_oid,
-                "id": disconnect_hero_oid,
                 "alias": format!("{}_Disconnect", prefix),
                 "secret_identity": "M2M Disconnector",
                 "power_level": 1000,
@@ -228,7 +225,6 @@ mod tests {
         mission_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": delete_mission_oid,
-                "id": delete_mission_oid,
                 "code": format!("{}_Delete", prefix),
                 "description": "Mission to delete",
                 "date": mongodb::bson::DateTime::now(),
@@ -243,7 +239,6 @@ mod tests {
         hero_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": delete_hero_oid,
-                "id": delete_hero_oid,
                 "alias": format!("{}_Delete", prefix),
                 "secret_identity": "M2M Deleter",
                 "power_level": 1100,
@@ -317,7 +312,6 @@ mod tests {
         hero_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": reverse_hero_oid,
-                "id": reverse_hero_oid,
                 "alias": format!("{}_RevConnect", prefix),
                 "secret_identity": "Reverse Connect Hero",
                 "power_level": 100,
@@ -433,7 +427,6 @@ mod tests {
         mission_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": rev_disconnect_mission_oid,
-                "id": rev_disconnect_mission_oid,
                 "code": format!("{}_RevDisconnect", prefix),
                 "description": "Mission for reverse disconnect",
                 "date": mongodb::bson::DateTime::now(),
@@ -448,7 +441,6 @@ mod tests {
         hero_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": rev_disconnect_hero_oid,
-                "id": rev_disconnect_hero_oid,
                 "alias": format!("{}_RevDisconnect", prefix),
                 "secret_identity": "Reverse Disconnect Hero",
                 "power_level": 50,
@@ -522,7 +514,6 @@ mod tests {
         mission_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": rev_delete_mission_oid,
-                "id": rev_delete_mission_oid,
                 "code": format!("{}_RevDelete", prefix),
                 "description": "Mission for reverse delete",
                 "date": mongodb::bson::DateTime::now(),
@@ -537,7 +528,6 @@ mod tests {
         hero_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": rev_delete_hero_oid,
-                "id": rev_delete_hero_oid,
                 "alias": format!("{}_RevDelete", prefix),
                 "secret_identity": "Reverse Delete Hero",
                 "power_level": 25,

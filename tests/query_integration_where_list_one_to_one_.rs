@@ -21,7 +21,7 @@ mod tests {
         // Villain
         db.collection::<mongodb::bson::Document>("villain")
             .insert_one(doc! {
-                "_id": villain_oid, "id": villain_oid,
+                "_id": villain_oid,
                 "alias": "TestVillain", "secret_identity": "Bad Guy",
                 "threat_level": 10, "active": true,
                 "rank": "ALPHA",
@@ -33,7 +33,7 @@ mod tests {
         // Hero with FK to villain (archenemy)
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
-                "_id": hero_oid, "id": hero_oid,
+                "_id": hero_oid,
                 "alias": "OneToOneHero", "secret_identity": "Test",
                 "power_level": 100, "active": true,
                 "archenemy_id": villain_oid,

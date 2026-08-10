@@ -24,7 +24,7 @@ mod tests {
 
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
-                "_id": hero_a, "id": hero_a,
+                "_id": hero_a,
                 "alias": "SortAlpha",
                 "secret_identity": "Alice",
                 "power_level": 1000,
@@ -38,7 +38,7 @@ mod tests {
 
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
-                "_id": hero_b, "id": hero_b,
+                "_id": hero_b,
                 "alias": "SortBeta",
                 "secret_identity": "Bob",
                 "power_level": 3000,
@@ -52,7 +52,7 @@ mod tests {
 
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
-                "_id": hero_c, "id": hero_c,
+                "_id": hero_c,
                 "alias": "SortGamma",
                 "secret_identity": "Charlie",
                 "power_level": 2000,

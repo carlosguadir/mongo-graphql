@@ -37,7 +37,6 @@ pub async fn resolve_create(
             doc.insert(mongo_name, value);
         }
         doc.insert("_id", oid);
-        doc.insert("id", oid);
 
         collection.insert_one(&doc).session(&mut session).await.map_err(|err| {
             if is_duplicate_key_error(&err) {

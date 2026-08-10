@@ -22,7 +22,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
                 "_id": hero_oid,
-                "id": hero_oid,
                 "alias": &hero_alias,
                 "secret_identity": "M2M Hero",
                 "power_level": 700,
@@ -38,7 +37,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("mission")
             .insert_one(doc! {
                 "_id": mission_oid,
-                "id": mission_oid,
                 "code": &mission_code,
                 "description": "A test mission",
                 "date": mongodb::bson::DateTime::now(),
@@ -87,7 +85,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
                 "_id": empty_hero_oid,
-                "id": empty_hero_oid,
                 "alias": &empty_hero_alias,
                 "secret_identity": "No Missions Hero",
                 "power_level": 100,
@@ -123,7 +120,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("mission")
             .insert_one(doc! {
                 "_id": rev_mission_oid,
-                "id": rev_mission_oid,
                 "code": &rev_mission_code,
                 "description": "Reverse M2M mission",
                 "date": mongodb::bson::DateTime::now(),
@@ -139,7 +135,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
                 "_id": rev_hero_oid,
-                "id": rev_hero_oid,
                 "alias": &rev_hero_alias,
                 "secret_identity": "Reverse M2M Hero",
                 "power_level": 400,

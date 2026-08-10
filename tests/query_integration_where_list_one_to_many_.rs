@@ -23,7 +23,7 @@ mod tests {
         // ---- seed: team and hero for forward filter ----
         db.collection::<mongodb::bson::Document>("team")
             .insert_one(doc! {
-                "_id": team_oid, "id": team_oid,
+                "_id": team_oid,
                 "name": "JusticeLeague", "secret_base": "Watchtower",
                 "founded_at": mongodb::bson::DateTime::now(),
                 "budget": 1000000.0, "is_official": true,
@@ -35,7 +35,7 @@ mod tests {
 
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
-                "_id": hero_oid, "id": hero_oid,
+                "_id": hero_oid,
                 "alias": "OneToManyHero", "secret_identity": "Test",
                 "power_level": 100, "active": true,
                 "team_id": team_oid,
@@ -48,7 +48,7 @@ mod tests {
         // ---- seed: team and hero for reverse filter ----
         db.collection::<mongodb::bson::Document>("team")
             .insert_one(doc! {
-                "_id": team_rev_oid, "id": team_rev_oid,
+                "_id": team_rev_oid,
                 "name": "ReverseTestTeam", "secret_base": "Batcave",
                 "founded_at": mongodb::bson::DateTime::now(),
                 "budget": 500000.0, "is_official": false,
@@ -61,7 +61,7 @@ mod tests {
         let rev_alias = format!("RevH-{}", &hero_rev_oid.to_hex()[..8]);
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
-                "_id": hero_rev_oid, "id": hero_rev_oid,
+                "_id": hero_rev_oid,
                 "alias": rev_alias.as_str(), "secret_identity": "Test",
                 "power_level": 50, "active": true,
                 "team_id": team_rev_oid,
