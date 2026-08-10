@@ -155,7 +155,6 @@ async fn build_schema() -> Result<async_graphql::dynamic::Schema, Error> {
 
     let config = RuntimeConfig {
         max_page_size,
-        enable_dataloader: true,
     };
     let schema = SchemaBuilder::new(&config, &definition)
         .build(client, db, Some(vec![Box::new(ResolverLogger)]))
