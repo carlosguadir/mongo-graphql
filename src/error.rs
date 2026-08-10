@@ -1,7 +1,7 @@
 use async_graphql::ErrorExtensions;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 #[non_exhaustive]
 pub enum GraphQLError {
     #[error("Config error: {0}")]
