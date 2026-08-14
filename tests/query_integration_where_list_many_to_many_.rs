@@ -27,7 +27,7 @@ mod tests {
         // ---- seed data ----
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
-                "_id": hero_oid, "id": hero_oid,
+                "_id": hero_oid,
                 "alias": "FilterHero", "secret_identity": "Test Identity",
                 "power_level": 100, "active": true,
                 "joined_at": mongodb::bson::DateTime::now(),
@@ -38,7 +38,7 @@ mod tests {
 
         db.collection::<mongodb::bson::Document>("mission")
             .insert_one(doc! {
-                "_id": mission_alpha_oid, "id": mission_alpha_oid,
+                "_id": mission_alpha_oid,
                 "code": alpha_code.as_str(), "description": "Alpha mission",
                 "date": mongodb::bson::DateTime::now(),
                 "status": "active", "danger_level": 5, "reward": 1000,
@@ -49,7 +49,7 @@ mod tests {
 
         db.collection::<mongodb::bson::Document>("mission")
             .insert_one(doc! {
-                "_id": mission_beta_oid, "id": mission_beta_oid,
+                "_id": mission_beta_oid,
                 "code": beta_code.as_str(), "description": "Beta mission",
                 "date": mongodb::bson::DateTime::now(),
                 "status": "completed", "danger_level": 2, "reward": 500,
@@ -60,7 +60,7 @@ mod tests {
 
         db.collection::<mongodb::bson::Document>("villain")
             .insert_one(doc! {
-                "_id": villain_oid, "id": villain_oid,
+                "_id": villain_oid,
                 "alias": "TestVillain", "secret_identity": "Bad Guy",
                 "threat_level": 10, "active": true, "rank": "ALPHA",
                 "created_at": mongodb::bson::DateTime::now(),

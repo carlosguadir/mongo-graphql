@@ -21,7 +21,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("secret_lair")
             .insert_one(mongodb::bson::doc! {
                 "_id": lair_oid,
-                "id": lair_oid,
                 "name": format!("{}_Lair", prefix),
                 "location": "Undisclosed",
                 "is_underground": true,
@@ -130,7 +129,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("secret_lair")
             .insert_one(mongodb::bson::doc! {
                 "_id": disconn_lair_oid,
-                "id": disconn_lair_oid,
                 "name": format!("{}_DiscoLair", prefix),
                 "location": "Forward Disconnect",
                 "is_underground": true,
@@ -141,7 +139,6 @@ mod tests {
         hero_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": disconn_hero_oid,
-                "id": disconn_hero_oid,
                 "alias": format!("{}_DiscoHero", prefix),
                 "secret_identity": "Forward Disconnect",
                 "power_level": 50,
@@ -191,7 +188,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("secret_lair")
             .insert_one(mongodb::bson::doc! {
                 "_id": del_lair_oid,
-                "id": del_lair_oid,
                 "name": format!("{}_DelLair", prefix),
                 "location": "Forward Delete",
                 "is_underground": true,
@@ -202,7 +198,6 @@ mod tests {
         hero_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": del_hero_oid,
-                "id": del_hero_oid,
                 "alias": format!("{}_DelHero", prefix),
                 "secret_identity": "Forward Delete",
                 "power_level": 25,
@@ -251,7 +246,6 @@ mod tests {
         hero_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": reverse_hero_oid,
-                "id": reverse_hero_oid,
                 "alias": format!("{}_RevConnect", prefix),
                 "secret_identity": "Reverse Connect Hero",
                 "power_level": 100,
@@ -358,7 +352,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("secret_lair")
             .insert_one(mongodb::bson::doc! {
                 "_id": disconnect_lair_oid,
-                "id": disconnect_lair_oid,
                 "name": format!("{}_DisconnectLair", prefix),
                 "location": "Disconnect Cave",
                 "is_underground": true,
@@ -369,7 +362,6 @@ mod tests {
         hero_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": disconnect_hero_oid,
-                "id": disconnect_hero_oid,
                 "alias": format!("{}_DisconnectRevHero", prefix),
                 "secret_identity": "Disconnect Rev",
                 "power_level": 50,
@@ -422,7 +414,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("secret_lair")
             .insert_one(mongodb::bson::doc! {
                 "_id": delete_lair_oid,
-                "id": delete_lair_oid,
                 "name": format!("{}_DeleteLair", prefix),
                 "location": "Delete Cave",
                 "is_underground": true,
@@ -433,7 +424,6 @@ mod tests {
         hero_coll
             .insert_one(mongodb::bson::doc! {
                 "_id": delete_hero_oid,
-                "id": delete_hero_oid,
                 "alias": format!("{}_DeleteRevHero", prefix),
                 "secret_identity": "Delete Rev",
                 "power_level": 25,

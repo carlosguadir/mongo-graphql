@@ -41,7 +41,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("team")
                 .insert_one(mongodb::bson::doc! {
                     "_id": team_oid,
-                    "id": team_oid,
                     "name": &team_name,
                     "founded_at": mongodb::bson::DateTime::now(),
                     "is_official": true,
@@ -137,7 +136,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("team")
                 .insert_one(mongodb::bson::doc! {
                     "_id": team_oid,
-                    "id": team_oid,
                     "name": &team_name,
                     "founded_at": mongodb::bson::DateTime::now(),
                     "is_official": true,
@@ -153,7 +151,6 @@ mod tests {
             hero_coll
                 .insert_one(mongodb::bson::doc! {
                     "_id": hero_oid,
-                    "id": hero_oid,
                     "alias": &hero_alias,
                     "secret_identity": &secret_identity,
                     "power_level": 200,
@@ -209,7 +206,6 @@ mod tests {
             hero_coll
                 .insert_one(mongodb::bson::doc! {
                     "_id": hero_oid,
-                    "id": hero_oid,
                     "alias": &hero_alias,
                     "secret_identity": &secret_identity,
                     "power_level": 300,
@@ -325,7 +321,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("team")
                 .insert_one(mongodb::bson::doc! {
                     "_id": team_oid,
-                    "id": team_oid,
                     "name": &team_name,
                     "founded_at": mongodb::bson::DateTime::now(),
                     "is_official": true,
@@ -341,7 +336,6 @@ mod tests {
             hero_coll
                 .insert_one(mongodb::bson::doc! {
                     "_id": hero_oid,
-                    "id": hero_oid,
                     "alias": &hero_alias,
                     "secret_identity": &secret_identity,
                     "power_level": 700,
@@ -403,7 +397,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("team")
                 .insert_one(mongodb::bson::doc! {
                     "_id": team_oid,
-                    "id": team_oid,
                     "name": &team_name,
                     "founded_at": mongodb::bson::DateTime::now(),
                     "is_official": true,
@@ -458,7 +451,6 @@ mod tests {
             hero_coll
                 .insert_one(mongodb::bson::doc! {
                     "_id": hero_oid,
-                    "id": hero_oid,
                     "alias": &hero_alias,
                     "secret_identity": &hero_identity,
                     "power_level": 100,
@@ -575,7 +567,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("team")
                 .insert_one(mongodb::bson::doc! {
                     "_id": team_oid,
-                    "id": team_oid,
                     "name": &team_name,
                     "founded_at": mongodb::bson::DateTime::now(),
                     "is_official": true,
@@ -591,7 +582,6 @@ mod tests {
             hero_coll
                 .insert_one(mongodb::bson::doc! {
                     "_id": hero_oid,
-                    "id": hero_oid,
                     "alias": &hero_alias,
                     "secret_identity": &hero_identity,
                     "power_level": 300,
@@ -644,7 +634,6 @@ mod tests {
             db.collection::<mongodb::bson::Document>("team")
                 .insert_one(mongodb::bson::doc! {
                     "_id": team_oid,
-                    "id": team_oid,
                     "name": &team_name,
                     "founded_at": mongodb::bson::DateTime::now(),
                     "is_official": true,
@@ -660,7 +649,6 @@ mod tests {
             hero_coll
                 .insert_one(mongodb::bson::doc! {
                     "_id": hero_oid,
-                    "id": hero_oid,
                     "alias": &hero_alias,
                     "secret_identity": &hero_identity,
                     "power_level": 25,

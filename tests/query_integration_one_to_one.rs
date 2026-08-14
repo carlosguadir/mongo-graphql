@@ -22,7 +22,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("villain")
             .insert_one(doc! {
                 "_id": villain_oid,
-                "id": villain_oid,
                 "alias": &villain_alias,
                 "secret_identity": "Forward Villain",
                 "threat_level": 90,
@@ -37,7 +36,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
                 "_id": hero_oid,
-                "id": hero_oid,
                 "alias": &hero_alias,
                 "secret_identity": "Nemesis Hero",
                 "power_level": 800,
@@ -79,7 +77,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
                 "_id": solo_oid,
-                "id": solo_oid,
                 "alias": &solo_alias,
                 "secret_identity": "No Nemesis",
                 "power_level": 300,
@@ -112,7 +109,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("villain")
             .insert_one(doc! {
                 "_id": rev_villain_oid,
-                "id": rev_villain_oid,
                 "alias": &rev_villain_alias,
                 "secret_identity": "Reverse Villain",
                 "threat_level": 75,
@@ -127,7 +123,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
                 "_id": nemesis_oid,
-                "id": nemesis_oid,
                 "alias": &nemesis_alias,
                 "secret_identity": "Reverse Nemesis",
                 "power_level": 700,
@@ -169,7 +164,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("villain")
             .insert_one(doc! {
                 "_id": lone_villain_oid,
-                "id": lone_villain_oid,
                 "alias": &lone_villain_alias,
                 "secret_identity": "Lone Villain",
                 "threat_level": 50,

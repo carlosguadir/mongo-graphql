@@ -26,7 +26,7 @@ mod tests {
         let hero_c = ObjectId::new();
 
         hero.insert_one(doc! {
-            "_id": hero_a, "id": hero_a,
+            "_id": hero_a,
             "alias": "FilterAlpha",
             "secret_identity": "Alice",
             "power_level": 1000,
@@ -41,7 +41,7 @@ mod tests {
         .unwrap();
 
         hero.insert_one(doc! {
-            "_id": hero_b, "id": hero_b,
+            "_id": hero_b,
             "alias": "FilterBeta",
             "secret_identity": "Bob",
             "power_level": 2000,
@@ -56,7 +56,7 @@ mod tests {
         .unwrap();
 
         hero.insert_one(doc! {
-            "_id": hero_c, "id": hero_c,
+            "_id": hero_c,
             "alias": "FilterGamma",
             "secret_identity": "Charlie",
             "power_level": 3000,

@@ -22,7 +22,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("team")
             .insert_one(doc! {
                 "_id": team_oid,
-                "id": team_oid,
                 "name": &team_name,
                 "founded_at": mongodb::bson::DateTime::now(),
                 "is_official": true,
@@ -36,7 +35,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
                 "_id": hero_oid,
-                "id": hero_oid,
                 "alias": &hero_alias,
                 "secret_identity": "Team Hero",
                 "power_level": 500,
@@ -79,7 +77,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
                 "_id": solo_oid,
-                "id": solo_oid,
                 "alias": &solo_alias,
                 "secret_identity": "No Team Hero",
                 "power_level": 300,
@@ -112,7 +109,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("team")
             .insert_one(doc! {
                 "_id": members_team_oid,
-                "id": members_team_oid,
                 "name": &members_team_name,
                 "founded_at": mongodb::bson::DateTime::now(),
                 "is_official": true,
@@ -126,7 +122,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("hero")
             .insert_one(doc! {
                 "_id": member_oid,
-                "id": member_oid,
                 "alias": &member_alias,
                 "secret_identity": "Member Hero",
                 "power_level": 600,
@@ -168,7 +163,6 @@ mod tests {
         db.collection::<mongodb::bson::Document>("team")
             .insert_one(doc! {
                 "_id": empty_team_oid,
-                "id": empty_team_oid,
                 "name": &empty_team_name,
                 "founded_at": mongodb::bson::DateTime::now(),
                 "is_official": true,
