@@ -456,6 +456,18 @@ pub fn collect_reverse_relations(
     (to_many, to_one)
 }
 
+/// Whether `key` names a reverse relation field exposed on `collection`
+/// (a OneToMany/OneToOne from another collection pointing TO it).
+pub(crate) fn is_reverse_relation_filter_key(
+    key: &str,
+    collection: &CollectionDef,
+    definition: &SchemaDefinition,
+) -> bool {
+    let (rev_to_many, rev_to_one) = collect_reverse_relations(collection, definition);
+    rev_to_many.iter().any(|r| r.graphql_name == key)
+        || rev_to_one.iter().any(|r| r.graphql_name == key)
+}
+
 /// Result of resolving nested relation filters.
 #[derive(Debug)]
 pub struct ResolvedFilter {

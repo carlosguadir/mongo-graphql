@@ -64,16 +64,14 @@ pub async fn resolve_list(
     )
     .await?;
     // Strip relation-filter keys (resolved above) so only scalar fields remain.
-    let (rev_to_many, rev_to_one) =
-        crate::resolvers::filter_relation::collect_reverse_relations(collection_def, definition);
-    let is_reverse_key = |key: &str| -> bool {
-        rev_to_many.iter().any(|r| r.graphql_name == key)
-            || rev_to_one.iter().any(|r| r.graphql_name == key)
-    };
     let mut scalar_filter = mongodb::bson::Document::new();
     for (key, value) in &raw_filter {
         if crate::resolvers::filter_relation::is_relation_filter_key(key, collection_def)
-            || is_reverse_key(key)
+            || crate::resolvers::filter_relation::is_reverse_relation_filter_key(
+                key,
+                collection_def,
+                definition,
+            )
         {
             continue;
         }
@@ -106,15 +104,7 @@ pub async fn resolve_list(
 
     let sort_raw: mongodb::bson::Document =
         try_deserialize_optional(&ctx.args, "sort")?.unwrap_or_else(|| doc! { "_id": if is_backward { -1 } else { 1 } });
-    let mut sort = mongodb::bson::Document::new();
-    for (gql_field, direction) in &sort_raw {
-        let mongo_name = graphql_to_mongo_field(gql_field, collection_def);
-        let dir = match direction.as_str() {
-            Some("DESC") => -1,
-            _ => direction.as_i32().unwrap_or(1),
-        };
-        sort.insert(mongo_name, dir);
-    }
+    let mut sort = transform_sort_input(sort_raw, collection_def);
 
     // Cursor direction flips for backward pagination.
     let sort_direction: i32 = if is_backward { -1 } else { 1 };
@@ -289,8 +279,24 @@ pub(crate) fn transform_where_filter(
     Ok(result)
 }
 
+pub(crate) fn transform_sort_input(
+    sort_raw: mongodb::bson::Document,
+    collection_def: &CollectionDef,
+) -> mongodb::bson::Document {
+    let mut sort = mongodb::bson::Document::new();
+    for (gql_field, direction) in &sort_raw {
+        let mongo_name = graphql_to_mongo_field(gql_field, collection_def);
+        let dir = match direction.as_str() {
+            Some("DESC") => -1,
+            _ => direction.as_i32().unwrap_or(1),
+        };
+        sort.insert(mongo_name, dir);
+    }
+    sort
+}
+
 /// Map a GraphQL field name to its MongoDB field name for a given collection.
-fn graphql_to_mongo_field(gql_field: &str, collection_def: &CollectionDef) -> String {
+pub(crate) fn graphql_to_mongo_field(gql_field: &str, collection_def: &CollectionDef) -> String {
     if gql_field == "id" {
         return "_id".to_string();
     }
@@ -388,5 +394,44 @@ mod tests {
         let filter = doc! {};
         let result = transform_id_filter(filter.clone()).unwrap();
         assert_eq!(result, filter);
+    }
+
+    #[test]
+    fn test_transform_sort_input_maps_fields_and_directions() {
+        let definition = crate::schema::parser::SchemaParser::from_str(
+            r#"{"collections": [{"collection": "hero", "fields": [
+                {"name": "id", "type": "ID"},
+                {"name": "alias", "type": "String"},
+                {"name": "power_level", "type": "Int"}
+            ]}]}"#,
+        )
+        .unwrap();
+        let hero = &definition.collections[0];
+
+        let sort = transform_sort_input(
+            doc! { "id": "DESC", "power_level": "ASC" },
+            hero,
+        );
+        assert_eq!(sort.get("_id"), Some(&Bson::Int32(-1)));
+        assert_eq!(sort.get("power_level"), Some(&Bson::Int32(1)));
+
+        let empty = transform_sort_input(doc! {}, hero);
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn test_bson_round_trip_preserves_types() {
+        // Regression guard: the BatchId filter bytes must survive a
+        // to_vec → from_slice round trip without losing BSON types.
+        let oid = ObjectId::new();
+        let dt = mongodb::bson::DateTime::now();
+        let doc = doc! { "_id": oid, "joined_at": dt };
+        let bytes = mongodb::bson::to_vec(&doc).unwrap();
+        let decoded: mongodb::bson::Document = mongodb::bson::from_slice(&bytes).unwrap();
+        assert_eq!(decoded.get_object_id("_id").unwrap(), oid);
+        assert!(matches!(
+            decoded.get("joined_at"),
+            Some(mongodb::bson::Bson::DateTime(_))
+        ));
     }
 }

@@ -25,6 +25,9 @@ pub enum GraphQLError {
     #[error("Pagination error: {0}")]
     Pagination(String),
 
+    #[error("Validation error: {0}")]
+    Validation(String),
+
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
 
@@ -64,6 +67,11 @@ impl GraphQLError {
             GraphQLError::Pagination(_) => {
                 async_graphql::Error::new(message).extend_with(|_, extensions| {
                     extensions.set("code", "INVALID_CURSOR");
+                })
+            }
+            GraphQLError::Validation(_) => {
+                async_graphql::Error::new(message).extend_with(|_, extensions| {
+                    extensions.set("code", "VALIDATION");
                 })
             }
             GraphQLError::Database(_)

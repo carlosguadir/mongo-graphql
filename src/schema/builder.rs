@@ -217,7 +217,8 @@ impl<'a> SchemaBuilder<'a> {
                                 resolve_to_field_value(result)
                             })
                         },
-                    ));
+                    ).argument(InputValue::new("where", TypeRef::named(format!("{}WhereInput", target_type))))
+                     .argument(InputValue::new("sort", TypeRef::named(format!("{}SortInput", target_type)))));
                 }
             }
         }
@@ -232,7 +233,7 @@ impl<'a> SchemaBuilder<'a> {
             let target_def_for_closure = target_def.clone();
             obj = obj.field(Field::new(
                 reverse_name.clone(),
-                TypeRef::named_nn_list(target_type),
+                TypeRef::named_nn_list(&target_type),
                 move |ctx| {
                     let loader = ctx.data::<crate::dataloader::DataLoader>().expect("DataLoader missing from context").clone();
                     let target_def = target_def_for_closure.clone();
@@ -245,7 +246,8 @@ impl<'a> SchemaBuilder<'a> {
                         resolve_to_field_value(result)
                     })
                 },
-            ));
+            ).argument(InputValue::new("where", TypeRef::named(format!("{}WhereInput", target_type))))
+             .argument(InputValue::new("sort", TypeRef::named(format!("{}SortInput", target_type)))));
         }
 
         for (reverse_name, target_coll_name, fk_field) in &reverse_to_one {

@@ -30,17 +30,19 @@ struct DataLoaderInner {
     batch_count: AtomicUsize,
 }
 /// Everything that changes the query shape. Sibling resolvers only share a
-/// batch when they agree on collection, filter field, AND projection.
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum BatchId {
     ById {
         collection: String,
         projection: Vec<String>,
+        filter: Option<Vec<u8>>,
     },
     ByFk {
         collection: String,
         fk_field: String,
         projection: Vec<String>,
+        filter: Option<Vec<u8>>,
+        sort: Option<Vec<u8>>,
     },
     Junction {
         collection: String,
@@ -95,6 +97,7 @@ impl DataLoader {
         let batch_id = BatchId::ById {
             collection: collection.to_string(),
             projection,
+            filter: None,
         };
         let mut map = self.load_keys(batch_id, &[id_hex.to_string()]).await?;
         Ok(map.remove(id_hex).flatten())
@@ -104,27 +107,34 @@ impl DataLoader {
         &self,
         collection: &str,
         projection: Vec<String>,
+        filter: Option<Vec<u8>>,
         id_hexes: &[String],
     ) -> Result<HashMap<String, serde_json::Value>, GraphQLError> {
         let batch_id = BatchId::ById {
             collection: collection.to_string(),
             projection,
+            filter,
         };
         self.load_keys(batch_id, id_hexes)
             .await
             .map(|m| m.into_iter().filter_map(|(k, v)| v.map(|v| (k, v))).collect())
     }
+
     pub async fn load_reverse_to_many(
         &self,
         collection: &str,
         fk_field: &str,
         projection: Vec<String>,
+        filter: Option<Vec<u8>>,
+        sort: Option<Vec<u8>>,
         parent_hex: &str,
     ) -> Result<Vec<serde_json::Value>, GraphQLError> {
         let batch_id = BatchId::ByFk {
             collection: collection.to_string(),
             fk_field: fk_field.to_string(),
             projection,
+            filter,
+            sort,
         };
         let mut map = self.load_keys(batch_id, &[parent_hex.to_string()]).await?;
         match map.remove(parent_hex).flatten() {
@@ -132,6 +142,7 @@ impl DataLoader {
             _ => Ok(vec![]),
         }
     }
+
     pub async fn load_reverse_to_one(
         &self,
         collection: &str,
@@ -143,6 +154,8 @@ impl DataLoader {
             collection: collection.to_string(),
             fk_field: fk_field.to_string(),
             projection,
+            filter: None,
+            sort: None,
         };
         let mut map = self.load_keys(batch_id, &[parent_hex.to_string()]).await?;
         match map.remove(parent_hex).flatten() {
@@ -270,11 +283,21 @@ impl DataLoaderInner {
         keys: &[String],
     ) -> Result<HashMap<String, Option<serde_json::Value>>, GraphQLError> {
         match batch_id {
-            BatchId::ById { collection, projection } => {
-                run_batch_by_id(&self.db, &self.definition, collection, projection, keys).await
+            BatchId::ById { collection, projection, filter } => {
+                run_batch_by_id(&self.db, &self.definition, collection, projection, filter.as_deref(), keys).await
             }
-            BatchId::ByFk { collection, fk_field, projection } => {
-                run_batch_by_fk(&self.db, &self.definition, collection, fk_field, projection, keys).await
+            BatchId::ByFk { collection, fk_field, projection, filter, sort } => {
+                run_batch_by_fk(
+                    &self.db,
+                    &self.definition,
+                    collection,
+                    fk_field,
+                    projection,
+                    filter.as_deref(),
+                    sort.as_deref(),
+                    keys,
+                )
+                .await
             }
             BatchId::Junction { collection, local_field, foreign_field } => {
                 run_batch_junction(&self.db, collection, local_field, foreign_field, keys).await
@@ -311,11 +334,21 @@ where
     }
     Ok(())
 }
+fn decode_document(bytes: Option<&[u8]>) -> Result<Document, GraphQLError> {
+    match bytes {
+        Some(bytes) => mongodb::bson::from_slice(bytes).map_err(|err| {
+            GraphQLError::Internal(format!("Failed to decode batch document: {}", err))
+        }),
+        None => Ok(Document::new()),
+    }
+}
+
 async fn run_batch_by_id(
     db: &Database,
     definition: &SchemaDefinition,
     collection_name: &str,
     projection: &[String],
+    filter_bytes: Option<&[u8]>,
     keys: &[String],
 ) -> Result<HashMap<String, Option<serde_json::Value>>, GraphQLError> {
     let oids = parse_keys(keys);
@@ -333,9 +366,15 @@ async fn run_batch_by_id(
         results.insert(hex.clone(), None);
     }
 
+    let filter_doc = decode_document(filter_bytes)?;
+    let mut query = doc! { "_id": { "$in": &oids } };
+    if !filter_doc.is_empty() {
+        query = doc! { "$and": [query, filter_doc] };
+    }
+
     let collection = db.collection::<Document>(collection_name);
     let cursor = collection
-        .find(doc! { "_id": { "$in": &oids } })
+        .find(query)
         .projection(projection_doc)
         .await?;
 
@@ -360,6 +399,8 @@ async fn run_batch_by_fk(
     collection_name: &str,
     fk_field: &str,
     projection: &[String],
+    filter_bytes: Option<&[u8]>,
+    sort_bytes: Option<&[u8]>,
     keys: &[String],
 ) -> Result<HashMap<String, Option<serde_json::Value>>, GraphQLError> {
     let oids = parse_keys(keys);
@@ -371,11 +412,21 @@ async fn run_batch_by_fk(
 
     let projection_doc = build_projection(projection, &[fk_field]);
 
-    let mut filter_doc = Document::new();
-    filter_doc.insert(fk_field, doc! { "$in": &oids });
+    let filter_doc = decode_document(filter_bytes)?;
+    let sort_doc = decode_document(sort_bytes)?;
+
+    let mut query = Document::new();
+    query.insert(fk_field, doc! { "$in": &oids });
+    if !filter_doc.is_empty() {
+        query = doc! { "$and": [query, filter_doc] };
+    }
 
     let collection = db.collection::<Document>(collection_name);
-    let cursor = collection.find(filter_doc).projection(projection_doc).await?;
+    let mut cursor = collection.find(query).projection(projection_doc);
+    if !sort_doc.is_empty() {
+        cursor = cursor.sort(sort_doc);
+    }
+    let cursor = cursor.await?;
 
     let grouped: Arc<Mutex<HashMap<String, Vec<serde_json::Value>>>> =
         Arc::new(Mutex::new(HashMap::new()));
@@ -512,4 +563,3 @@ pub fn selection_projection_fields(
     fields.dedup();
     fields
 }
-
