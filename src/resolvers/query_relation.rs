@@ -53,58 +53,63 @@ fn reject_relation_filter_keys(
     Ok(())
 }
 
-fn compare_numbers(x: &serde_json::Number, y: &serde_json::Number) -> std::cmp::Ordering {
+fn compare_numbers(left: &serde_json::Number, right: &serde_json::Number) -> std::cmp::Ordering {
     // Compare integers exactly first; going straight to f64 loses precision
     // beyond 2^53 and collapses distinct values into a tie.
-    match (x.as_i64(), y.as_i64()) {
-        (Some(a), Some(b)) => return a.cmp(&b),
+    match (left.as_i64(), right.as_i64()) {
+        (Some(left_integer), Some(right_integer)) => return left_integer.cmp(&right_integer),
         _ => {}
     }
-    match (x.as_u64(), y.as_u64()) {
-        (Some(a), Some(b)) => return a.cmp(&b),
+    match (left.as_u64(), right.as_u64()) {
+        (Some(left_integer), Some(right_integer)) => return left_integer.cmp(&right_integer),
         _ => {}
     }
-    x.as_f64()
-        .partial_cmp(&y.as_f64())
+    left.as_f64()
+        .partial_cmp(&right.as_f64())
         .unwrap_or(std::cmp::Ordering::Equal)
 }
 
-fn compare_json_values(a: &serde_json::Value, b: &serde_json::Value) -> std::cmp::Ordering {
-    use serde_json::Value as J;
-    let rank = |v: &J| -> u8 {
-        match v {
-            J::Null => 0,
-            J::Bool(_) => 1,
-            J::Number(_) => 2,
-            J::String(_) => 3,
-            J::Array(_) => 4,
-            J::Object(_) => 5,
+fn compare_json_values(left: &serde_json::Value, right: &serde_json::Value) -> std::cmp::Ordering {
+    let json_type_rank = |value: &serde_json::Value| -> u8 {
+        match value {
+            serde_json::Value::Null => 0,
+            serde_json::Value::Bool(_) => 1,
+            serde_json::Value::Number(_) => 2,
+            serde_json::Value::String(_) => 3,
+            serde_json::Value::Array(_) => 4,
+            serde_json::Value::Object(_) => 5,
         }
     };
-    let rank_order = rank(a).cmp(&rank(b));
+    let rank_order = json_type_rank(left).cmp(&json_type_rank(right));
     if rank_order != std::cmp::Ordering::Equal {
         return rank_order;
     }
-    match (a, b) {
-        (J::Bool(x), J::Bool(y)) => x.cmp(y),
-        (J::Number(x), J::Number(y)) => compare_numbers(x, y),
-        (J::String(x), J::String(y)) => x.cmp(y),
+    match (left, right) {
+        (serde_json::Value::Bool(left_bool), serde_json::Value::Bool(right_bool)) => {
+            left_bool.cmp(right_bool)
+        }
+        (serde_json::Value::Number(left_number), serde_json::Value::Number(right_number)) => {
+            compare_numbers(left_number, right_number)
+        }
+        (serde_json::Value::String(left_string), serde_json::Value::String(right_string)) => {
+            left_string.cmp(right_string)
+        }
         _ => std::cmp::Ordering::Equal,
     }
 }
 
 fn sort_json_array_by_spec(array: &mut [serde_json::Value], sort_spec: &Document) {
-    array.sort_by(|a, b| {
+    array.sort_by(|left_doc, right_doc| {
         for (gql_field, direction) in sort_spec {
-            let a_val = a
+            let left_value = left_doc
                 .as_object()
-                .and_then(|m| m.get(gql_field))
+                .and_then(|object| object.get(gql_field))
                 .unwrap_or(&serde_json::Value::Null);
-            let b_val = b
+            let right_value = right_doc
                 .as_object()
-                .and_then(|m| m.get(gql_field))
+                .and_then(|object| object.get(gql_field))
                 .unwrap_or(&serde_json::Value::Null);
-            let ordering = compare_json_values(a_val, b_val);
+            let ordering = compare_json_values(left_value, right_value);
             if ordering != std::cmp::Ordering::Equal {
                 return if direction.as_str() == Some("DESC") {
                     ordering.reverse()

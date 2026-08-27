@@ -464,8 +464,8 @@ pub(crate) fn is_reverse_relation_filter_key(
     definition: &SchemaDefinition,
 ) -> bool {
     let (rev_to_many, rev_to_one) = collect_reverse_relations(collection, definition);
-    rev_to_many.iter().any(|r| r.graphql_name == key)
-        || rev_to_one.iter().any(|r| r.graphql_name == key)
+    rev_to_many.iter().any(|relation| relation.graphql_name == key)
+        || rev_to_one.iter().any(|relation| relation.graphql_name == key)
 }
 
 /// Result of resolving nested relation filters.
